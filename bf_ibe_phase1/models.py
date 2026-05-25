@@ -1,8 +1,8 @@
 """Data contracts for phase one of the BF-IBE file distribution system.
 
 The classes in this module are intentionally lightweight. They model the
-interfaces and payloads that later phases will wire to real BF-IBE and
-AES-GCM implementations.
+interfaces and payloads that later phases will wire to BasicIdent and
+FullIdent from the Boneh-Franklin IBE paper.
 """
 
 from __future__ import annotations
@@ -28,7 +28,10 @@ class PublicParameters:
     generator_g1_b64: str
     public_point_b64: str
     hash_to_point: str
-    kem_kdf: str
+    hash_h2: str
+    hash_h3: str | None
+    hash_h4: str | None
+    message_size_bits: int
     version: str
 
 
@@ -78,6 +81,12 @@ class TimeBoundIdentity:
         return cls(email=email.strip().lower(), hour=normalized.strftime(HOUR_FORMAT))
 
     @classmethod
+    def for_requested_hour(cls, email: str, requested_hour: str) -> TimeBoundIdentity:
+        if not HOUR_PATTERN.match(requested_hour):
+            raise ValueError("requested_hour must use YYYY-MM-DD-HH")
+        return cls(email=email.strip().lower(), hour=requested_hour)
+
+    @classmethod
     def parse(cls, value: str) -> TimeBoundIdentity:
         parts = value.split(TIME_BOUND_ID_SEPARATOR)
         if len(parts) != 2 or not parts[0] or not HOUR_PATTERN.match(parts[1]):
@@ -97,27 +106,33 @@ class KeyPackage:
 
 
 @dataclass(frozen=True)
-class RecipientCapsule:
-    """IBE KEM envelope for one recipient of an encrypted file."""
+class RecipientCiphertext:
+    """Direct BasicIdent or FullIdent ciphertext for one recipient and chunk."""
 
     recipient_email: str
     time_bound_id: str
-    ibe_capsule_b64: str
-    encrypted_file_key_b64: str
+    scheme_mode: str
+    chunk_index: int
+    u_b64: str
+    v_b64: str
+    w_b64: str | None = None
+
+    @property
+    def is_full_ident(self) -> bool:
+        return self.scheme_mode == "FullIdent"
 
 
 @dataclass(frozen=True)
 class EncryptedFileHeader:
-    """Metadata needed by the client to decrypt a ciphertext file."""
+    """Metadata needed by the client to decrypt direct IBE ciphertext chunks."""
 
     file_id: str
     algorithm: str
     encryption_hour: str
-    nonce_b64: str
-    aad_b64: str
     ciphertext_sha256: str
-    recipients: list[RecipientCapsule]
+    recipients: list[RecipientCiphertext]
     schema_version: str = "phase1.v1"
+    chunk_size_bytes: int = 32
     metadata: dict[str, Any] = field(default_factory=dict)
 
     @property

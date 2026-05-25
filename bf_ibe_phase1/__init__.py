@@ -9,7 +9,7 @@ from bf_ibe_phase1.models import (
     MasterSecret,
     PrivateKey,
     PublicParameters,
-    RecipientCapsule,
+    RecipientCiphertext,
     TimeBoundIdentity,
     UserPrincipal,
 )
@@ -27,7 +27,7 @@ __all__ = [
     "PKGClient",
     "PrivateKey",
     "PublicParameters",
-    "RecipientCapsule",
+    "RecipientCiphertext",
     "TimeBoundIdentity",
     "UserPrincipal",
 ]

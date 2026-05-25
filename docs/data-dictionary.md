@@ -13,7 +13,7 @@
 
 ## TimeBoundIdentity
 
-IBE 公钥身份字符串。
+IBE 公钥身份字符串。阶段一固定使用 `email||YYYY-MM-DD-HH`，PKG 不发放历史小时私钥。
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
@@ -27,19 +27,24 @@ IBE 公钥身份字符串。
 alice@company.com||2026-05-17-14
 ```
 
+若一个文件需要 3 小时有效期，客户端会在 header 中为同一接收者放入 3 个不同小时的 `RecipientCiphertext`。过期后不申请旧小时私钥，而是由发送者重新分享。
+
 ## PublicParameters
 
 所有客户端可见的 BF-IBE 公共参数。
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `scheme` | string | `BF-IBE-BASIC` 或 `BF-IBE-FULL` |
+| `scheme` | string | `BF-IBE-DIRECT` |
 | `curve` | string | 椭圆曲线或双线性群参数名称 |
 | `pairing` | string | 配对类型描述 |
 | `generator_g1_b64` | string | G1 生成元序列化值 |
 | `public_point_b64` | string | 主公钥点序列化值 |
 | `hash_to_point` | string | Hash-to-Point 方案 |
-| `kem_kdf` | string | KEM 输出到文件密钥封装密钥的 KDF |
+| `hash_h2` | string | BasicIdent/FullIdent 中从 `G2` 派生掩码的哈希 |
+| `hash_h3` | string/null | FullIdent 中从 `sigma, M` 派生 `r` 的哈希 |
+| `hash_h4` | string/null | FullIdent 中从 `sigma` 派生消息掩码的哈希 |
+| `message_size_bits` | integer | 论文算法单次加密的定长消息位数 |
 | `version` | string | 公共参数版本 |
 
 ## MasterSecret
@@ -79,16 +84,19 @@ PKG 为当前员工、当前小时派生的 IBE 私钥。
 | `public_parameters` | PublicParameters | 当前公共参数 |
 | `ntp_policy` | string | 时钟同步策略说明 |
 
-## RecipientCapsule
+## RecipientCiphertext
 
-一份文件面向一个接收者的 IBE 封装条目。
+一份文件面向一个接收者、一个小时、一个 chunk 的直接 IBE 密文条目。
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `recipient_email` | string | 接收者邮箱 |
 | `time_bound_id` | string | 接收者小时 ID |
-| `ibe_capsule_b64` | string | BF-IBE KEM capsule |
-| `encrypted_file_key_b64` | string | 被封装或包裹后的文件密钥 |
+| `scheme_mode` | string | `BasicIdent` 或 `FullIdent` |
+| `chunk_index` | integer | 文件 chunk 序号 |
+| `u_b64` | string | 论文密文分量 `U = rP` |
+| `v_b64` | string | BasicIdent/FullIdent 的 `V` 分量 |
+| `w_b64` | string/null | FullIdent 的 `W` 分量；BasicIdent 为 null |
 
 ## EncryptedFileHeader
 
@@ -98,12 +106,11 @@ PKG 为当前员工、当前小时派生的 IBE 私钥。
 | --- | --- | --- |
 | `file_id` | string | 文件唯一 ID |
 | `schema_version` | string | header schema 版本，默认 `phase1.v1` |
-| `algorithm` | string | 加密套件，如 `BF-IBE-FULL-KEM+A256GCM` |
+| `algorithm` | string | 加密套件，如 `BF-IBE-BASICIDENT-DIRECT` 或 `BF-IBE-FULLIDENT-DIRECT` |
 | `encryption_hour` | string | 文件加密小时 |
-| `nonce_b64` | string | AES-GCM nonce |
-| `aad_b64` | string | AES-GCM AAD |
 | `ciphertext_sha256` | string | 密文 SHA-256 |
-| `recipients` | RecipientCapsule[] | 多接收者封装列表 |
+| `recipients` | RecipientCiphertext[] | 多接收者、多小时、多 chunk 密文列表 |
+| `chunk_size_bytes` | integer | 每个 IBE 消息 chunk 的字节数 |
 | `metadata` | object | 原始文件名等非敏感业务元数据 |
 
 派生属性：

@@ -9,6 +9,7 @@ API 使用 FastAPI 风格建模。阶段一只定义接口契约和 payload，�
 - 时间字段使用 ISO 8601 UTC 字符串。
 - 小时字段使用 `YYYY-MM-DD-HH`。
 - IBE 时间绑定身份使用 `email||YYYY-MM-DD-HH`。
+- PKG 只发放当前小时私钥，不提供历史私钥申请接口。
 
 ## POST /auth/mock-login
 
@@ -47,13 +48,16 @@ API 使用 FastAPI 风格建模。阶段一只定义接口契约和 payload，�
 
 ```json
 {
-  "scheme": "BF-IBE-FULL",
+  "scheme": "BF-IBE-DIRECT",
   "curve": "BN254",
   "pairing": "type-3",
   "generator_g1_b64": "base64...",
   "public_point_b64": "base64...",
   "hash_to_point": "RFC9380-SHA256",
-  "kem_kdf": "HKDF-SHA256",
+  "hash_h2": "SHA256-to-mask",
+  "hash_h3": "SHA256-to-Zq",
+  "hash_h4": "SHA256-to-mask",
+  "message_size_bits": 256,
   "version": "pp-2026-05"
 }
 ```
@@ -86,13 +90,16 @@ API 使用 FastAPI 风格建模。阶段一只定义接口契约和 payload，�
     "public_parameters_version": "pp-2026-05"
   },
   "public_parameters": {
-    "scheme": "BF-IBE-FULL",
+    "scheme": "BF-IBE-DIRECT",
     "curve": "BN254",
     "pairing": "type-3",
     "generator_g1_b64": "base64...",
     "public_point_b64": "base64...",
     "hash_to_point": "RFC9380-SHA256",
-    "kem_kdf": "HKDF-SHA256",
+    "hash_h2": "SHA256-to-mask",
+    "hash_h3": "SHA256-to-Zq",
+    "hash_h4": "SHA256-to-mask",
+    "message_size_bits": 256,
     "version": "pp-2026-05"
   },
   "ntp_policy": "PKG server time is authoritative; clients should sync to corp.ntp.local"
@@ -121,23 +128,28 @@ API 使用 FastAPI 风格建模。阶段一只定义接口契约和 payload，�
 {
   "file_id": "file-001",
   "schema_version": "phase1.v1",
-  "algorithm": "BF-IBE-FULL-KEM+A256GCM",
+  "algorithm": "BF-IBE-FULLIDENT-DIRECT",
   "encryption_hour": "2026-05-17-14",
-  "nonce_b64": "base64...",
-  "aad_b64": "base64...",
+  "chunk_size_bytes": 32,
   "ciphertext_sha256": "abc123",
   "recipients": [
     {
       "recipient_email": "alice@company.com",
       "time_bound_id": "alice@company.com||2026-05-17-14",
-      "ibe_capsule_b64": "base64...",
-      "encrypted_file_key_b64": "base64..."
+      "scheme_mode": "FullIdent",
+      "chunk_index": 0,
+      "u_b64": "base64...",
+      "v_b64": "base64...",
+      "w_b64": "base64..."
     },
     {
       "recipient_email": "bob@company.com",
       "time_bound_id": "bob@company.com||2026-05-17-14",
-      "ibe_capsule_b64": "base64...",
-      "encrypted_file_key_b64": "base64..."
+      "scheme_mode": "BasicIdent",
+      "chunk_index": 0,
+      "u_b64": "base64...",
+      "v_b64": "base64...",
+      "w_b64": null
     }
   ],
   "metadata": {
@@ -220,3 +232,48 @@ API 使用 FastAPI 风格建模。阶段一只定义接口契约和 payload，�
 - `401 Unauthorized`: JWT 缺失或无效。
 - `403 Forbidden`: 当前用户既不是 owner，也不在接收者列表中。
 - `404 Not Found`: 文件不存在。
+
+## POST /benchmarks/ibe
+
+阶段二实验接口，用于比较论文 BasicIdent 与 FullIdent 的运行时间和密文膨胀。该接口不参与文件分发主流程，可由 CLI 或测试脚本调用。
+
+### Request
+
+```json
+{
+  "modes": ["BasicIdent", "FullIdent"],
+  "message_size_bits": 256,
+  "chunk_count": 100,
+  "recipient_count": 1,
+  "valid_hours": 3,
+  "repeat": 30,
+  "tamper_test": true
+}
+```
+
+### Response 200
+
+```json
+{
+  "results": [
+    {
+      "mode": "BasicIdent",
+      "security_target": "IND-ID-CPA",
+      "encrypt_ms_avg": 1.2,
+      "decrypt_ms_avg": 1.5,
+      "ciphertext_components": ["U", "V"],
+      "ciphertext_expansion_bytes_avg": 96,
+      "tamper_rejection": "not provided by BasicIdent"
+    },
+    {
+      "mode": "FullIdent",
+      "security_target": "IND-ID-CCA",
+      "encrypt_ms_avg": 1.4,
+      "decrypt_ms_avg": 2.0,
+      "ciphertext_components": ["U", "V", "W"],
+      "ciphertext_expansion_bytes_avg": 128,
+      "tamper_reject_ms_avg": 2.1
+    }
+  ]
+}
+```

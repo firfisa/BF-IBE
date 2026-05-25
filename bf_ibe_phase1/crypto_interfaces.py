@@ -1,7 +1,8 @@
 """Business-facing encryption and decryption interfaces.
 
 Real cryptographic operations are deferred to phase two. These abstractions
-document how the client code will call into BF-IBE KEM and AES-GCM DEM logic.
+document how the client code will call into direct BasicIdent and FullIdent
+implementations from the Boneh-Franklin IBE paper.
 """
 
 from __future__ import annotations
@@ -23,8 +24,9 @@ class FileEncryptor(ABC):
         recipients: Iterable[str],
         public_parameters: PublicParameters,
         output_path: Path,
+        scheme_mode: str,
     ) -> EncryptedFileHeader:
-        """Encrypt `source_path` and write ciphertext to `output_path`."""
+        """Encrypt `source_path` into direct IBE ciphertext chunks at `output_path`."""
         raise NotImplementedError
 
 
@@ -39,5 +41,5 @@ class FileDecryptor(ABC):
         key_package: KeyPackage,
         output_path: Path,
     ) -> Path:
-        """Decrypt `ciphertext_path` into `output_path`."""
+        """Decrypt direct IBE ciphertext chunks from `ciphertext_path` into `output_path`."""
         raise NotImplementedError

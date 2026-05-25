@@ -52,9 +52,9 @@ sequenceDiagram
   SSO-->>Sender: JWT
   Sender->>PKG: GET /pkg/public-parameters
   PKG-->>Sender: PublicParameters
-  Sender->>Sender: 生成文件密钥并 AES-GCM 加密文件
-  Sender->>Sender: 为每个接收者构造 email||YYYY-MM-DD-HH
-  Sender->>Sender: BF-IBE KEM 封装文件密钥
+  Sender->>Sender: 将文件切分为定长 chunk
+  Sender->>Sender: 为每个接收者/有效小时构造 email||YYYY-MM-DD-HH
+  Sender->>Sender: 直接运行 BasicIdent 或 FullIdent 加密每个 chunk
   Sender->>FS: POST /files 密文 + EncryptedFileHeader
   FS-->>Sender: FileMetadata
 ```
@@ -75,8 +75,8 @@ sequenceDiagram
   FS-->>Receiver: 密文 + EncryptedFileHeader
   Receiver->>PKG: POST /pkg/private-keys/current
   PKG-->>Receiver: KeyPackage(当前小时私钥)
-  Receiver->>Receiver: 匹配 RecipientCapsule.time_bound_id
-  Receiver->>Receiver: 解封文件密钥并 AES-GCM 解密
+  Receiver->>Receiver: 匹配 RecipientCiphertext.time_bound_id
+  Receiver->>Receiver: 按 chunk 运行 BasicIdent 或 FullIdent 解密
 ```
 
 ## 小时过期失败流程
@@ -92,6 +92,37 @@ sequenceDiagram
   FS-->>Client: header.encryption_hour = 2026-05-17-14
   Client->>PKG: 15:01 请求当前小时私钥
   PKG-->>Client: alice@company.com||2026-05-17-15 私钥
-  Client->>Client: 当前私钥 ID 与 header 中 14 点 capsule 不匹配
+  Client->>Client: 当前私钥 ID 与 header 中 14 点密文块不匹配
   Client-->>Client: 拒绝解密，记录 EXPIRED_HOUR_KEY_MISMATCH
+```
+
+## 有效期窗口访问流程
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor Client as 接收者客户端
+  participant PKG as PKG 服务
+  participant FS as 文件服务
+
+  Client->>FS: 下载 2 点发送、有效期 3 小时的文件
+  FS-->>Client: header 包含 02 / 03 / 04 三个小时的密文块
+  Client->>PKG: 03:10 请求当前小时私钥
+  PKG-->>Client: alice@company.com||2026-05-17-03 私钥
+  Client->>Client: 匹配 03 点密文块并解密
+  Client->>PKG: 08:00 再次请求当前小时私钥
+  PKG-->>Client: alice@company.com||2026-05-17-08 私钥
+  Client->>Client: header 中无 08 点密文块，拒绝解密
+```
+
+## BasicIdent 与 FullIdent 对比流程
+
+```mermaid
+flowchart LR
+  Plain["定长消息 chunk M"] --> Basic["BasicIdent: C=<U,V>"]
+  Plain --> Full["FullIdent: C=<U,V,W>"]
+  Basic --> CPA["IND-ID-CPA 基线"]
+  Full --> CCA["IND-ID-CCA + U=rP 校验"]
+  CPA --> Bench["记录加密/解密时间与密文膨胀"]
+  CCA --> Bench
 ```

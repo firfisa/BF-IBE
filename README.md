@@ -5,10 +5,10 @@
 ## Current Scope
 
 - 明确三类核心实体：PKG 企业密钥中心、文件服务/密文仓库、员工客户端 CLI。
-- 固定时间绑定身份格式：`email||YYYY-MM-DD-HH`。
+- 默认时间绑定身份格式：`email||YYYY-MM-DD-HH`；PKG 不提供历史私钥申请接口。
 - 采用客户端 Pull 的小时私钥分发策略。
 - 文件服务只保存密文、加密头和审计元数据，不接触明文。
-- 提供 Python 空接口代码和数据模型，真实 BF-IBE、KEM-DEM、AES-GCM 留到阶段二实现。
+- 提供 Python 空接口代码和数据模型，阶段二直接实现论文中的 BasicIdent 与 FullIdent，并比较 IND-ID-CPA 与 IND-ID-CCA 模式的运行开销。
 
 ## Repository Map
 
