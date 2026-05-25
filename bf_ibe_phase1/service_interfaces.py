@@ -14,7 +14,7 @@ from bf_ibe_phase1.models import (
 
 
 class PKGClient(ABC):
-    """Pull public parameters and current-hour private keys from the PKG."""
+    """Pull public parameters and requested-hour private keys from the PKG."""
 
     @abstractmethod
     def get_public_parameters(self, jwt: str) -> PublicParameters:
@@ -22,8 +22,23 @@ class PKGClient(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def get_current_private_key(self, jwt: str, client_time_iso: str | None = None) -> KeyPackage:
-        """Return the private key for the authenticated user's server-side hour."""
+    def get_private_key(
+        self,
+        jwt: str,
+        requested_hour: str,
+        client_time_iso: str | None = None,
+    ) -> KeyPackage:
+        """Return a private key for the requested hour if the user is active."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_private_keys(
+        self,
+        jwt: str,
+        requested_hours: list[str],
+        client_time_iso: str | None = None,
+    ) -> list[KeyPackage]:
+        """Return private keys for a requested hour range if the user is active."""
         raise NotImplementedError
 
 

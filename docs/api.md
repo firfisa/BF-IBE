@@ -9,7 +9,8 @@ API 使用 FastAPI 风格建模。阶段一只定义接口契约和 payload，�
 - 时间字段使用 ISO 8601 UTC 字符串。
 - 小时字段使用 `YYYY-MM-DD-HH`。
 - IBE 时间绑定身份使用 `email||YYYY-MM-DD-HH`。
-- PKG 只发放当前小时私钥，不提供历史私钥申请接口。
+- 合法在职用户可以向 PKG 申请任意小时或时间段的私钥。
+- PKG 发放私钥时只信任服务端员工状态；离职、禁用或 JWT 无效时拒绝所有小时申请。
 
 ## POST /auth/mock-login
 
@@ -62,15 +63,21 @@ API 使用 FastAPI 风格建模。阶段一只定义接口契约和 payload，�
 }
 ```
 
-## POST /pkg/private-keys/current
+## POST /pkg/private-keys/request
 
-客户端 Pull 当前小时私钥。PKG 使用服务端当前小时，客户端不能指定目标小时。
+客户端 Pull 指定小时或时间段的私钥。PKG 不限制请求小时是否在过去，只校验用户当前是否仍为合法员工。
 
 ### Request
 
 ```json
 {
-  "client_time": "2026-05-17T14:30:00Z"
+  "requested_hours": [
+    "2026-05-17-02",
+    "2026-05-17-03",
+    "2026-05-17-04"
+  ],
+  "client_time": "2026-05-17T08:30:00Z",
+  "reason": "decrypt files received earlier today"
 }
 ```
 
@@ -79,16 +86,27 @@ API 使用 FastAPI 风格建模。阶段一只定义接口契约和 payload，�
 ```json
 {
   "subject_email": "alice@company.com",
-  "server_hour": "2026-05-17-14",
-  "private_key": {
-    "time_bound_id": "alice@company.com||2026-05-17-14",
-    "recipient_email": "alice@company.com",
-    "valid_hour": "2026-05-17-14",
-    "private_key_b64": "base64...",
-    "issued_at": "2026-05-17T14:30:02Z",
-    "expires_at": "2026-05-17T15:00:00Z",
-    "public_parameters_version": "pp-2026-05"
-  },
+  "server_time": "2026-05-17T08:30:02Z",
+  "keys": [
+    {
+      "time_bound_id": "alice@company.com||2026-05-17-02",
+      "recipient_email": "alice@company.com",
+      "valid_hour": "2026-05-17-02",
+      "private_key_b64": "base64...",
+      "issued_at": "2026-05-17T08:30:02Z",
+      "expires_at": "2026-05-17T09:00:00Z",
+      "public_parameters_version": "pp-2026-05"
+    },
+    {
+      "time_bound_id": "alice@company.com||2026-05-17-03",
+      "recipient_email": "alice@company.com",
+      "valid_hour": "2026-05-17-03",
+      "private_key_b64": "base64...",
+      "issued_at": "2026-05-17T08:30:02Z",
+      "expires_at": "2026-05-17T09:00:00Z",
+      "public_parameters_version": "pp-2026-05"
+    }
+  ],
   "public_parameters": {
     "scheme": "BF-IBE-DIRECT",
     "curve": "BN254",
@@ -102,14 +120,15 @@ API 使用 FastAPI 风格建模。阶段一只定义接口契约和 payload，�
     "message_size_bits": 256,
     "version": "pp-2026-05"
   },
-  "ntp_policy": "PKG server time is authoritative; clients should sync to corp.ntp.local"
+  "authorization_policy": "keys are issued only while the employee is active",
+  "ntp_policy": "PKG server time is authoritative for audit and employee-state checks"
 }
 ```
 
 ### Errors
 
 - `401 Unauthorized`: JWT 缺失或无效。
-- `403 Forbidden`: 用户未激活、无权限或被撤销。
+- `403 Forbidden`: 用户离职、被禁用或不再是合法员工。
 
 ## POST /files
 

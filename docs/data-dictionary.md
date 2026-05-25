@@ -9,11 +9,11 @@
 | `subject` | string | 企业身份系统中的稳定用户 ID |
 | `email` | string | 员工邮箱，作为 IBE 身份前缀 |
 | `roles` | string[] | 员工角色，如 `employee`、`admin` |
-| `active` | boolean | 是否允许 PKG 发放当前小时私钥 |
+| `active` | boolean | 是否允许 PKG 发放任意请求小时的私钥 |
 
 ## TimeBoundIdentity
 
-IBE 公钥身份字符串。阶段一固定使用 `email||YYYY-MM-DD-HH`，PKG 不发放历史小时私钥。
+IBE 公钥身份字符串。阶段一固定使用 `email||YYYY-MM-DD-HH`，合法在职用户可向 PKG 申请任意小时对应的私钥。
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
@@ -27,7 +27,7 @@ IBE 公钥身份字符串。阶段一固定使用 `email||YYYY-MM-DD-HH`，PKG �
 alice@company.com||2026-05-17-14
 ```
 
-若一个文件需要 3 小时有效期，客户端会在 header 中为同一接收者放入 3 个不同小时的 `RecipientCiphertext`。过期后不申请旧小时私钥，而是由发送者重新分享。
+文件 header 会记录加密时使用的小时。接收者访问旧文件时，客户端按 header 中的小时向 PKG 申请对应私钥；PKG 只检查接收者当前是否仍是合法员工。
 
 ## PublicParameters
 
@@ -60,27 +60,27 @@ alice@company.com||2026-05-17-14
 
 ## PrivateKey
 
-PKG 为当前员工、当前小时派生的 IBE 私钥。
+PKG 为合法员工、请求小时派生的 IBE 私钥。
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `time_bound_id` | string | 对应 `email||YYYY-MM-DD-HH` |
 | `recipient_email` | string | 私钥所属员工邮箱 |
-| `valid_hour` | string | 私钥有效小时 |
+| `valid_hour` | string | 私钥对应的请求小时 |
 | `private_key_b64` | string | 序列化私钥 |
 | `issued_at` | datetime | PKG 发放时间 |
-| `expires_at` | datetime | 当前小时结束时间 |
+| `expires_at` | datetime | 客户端缓存过期时间；不改变 `valid_hour` 的密码学含义 |
 | `public_parameters_version` | string | 对应公共参数版本 |
 
 ## KeyPackage
 
-客户端从 PKG Pull 私钥时拿到的响应包。
+客户端从 PKG Pull 私钥时拿到的响应包。单小时申请返回一个 `KeyPackage`；时间段申请返回 `KeyPackage` 列表。
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `subject_email` | string | 请求者邮箱 |
-| `server_hour` | string | PKG 服务端当前小时 |
-| `private_key` | PrivateKey | 当前小时私钥 |
+| `server_hour` | string | PKG 发放时的服务端小时，用于审计 |
+| `private_key` | PrivateKey | 请求小时对应的私钥 |
 | `public_parameters` | PublicParameters | 当前公共参数 |
 | `ntp_policy` | string | 时钟同步策略说明 |
 

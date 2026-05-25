@@ -31,7 +31,7 @@ class FileEncryptor(ABC):
 
 
 class FileDecryptor(ABC):
-    """Decrypt a ciphertext file using the current-hour private key package."""
+    """Decrypt a ciphertext file using the matching requested-hour key package."""
 
     @abstractmethod
     def decrypt_file(
