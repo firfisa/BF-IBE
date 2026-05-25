@@ -11,6 +11,7 @@ API 使用 FastAPI 风格建模。阶段一只定义接口契约和 payload，�
 - IBE 时间绑定身份使用 `email||YYYY-MM-DD-HH`。
 - 合法在职用户可以向 PKG 申请任意小时或时间段的私钥。
 - PKG 发放私钥时只信任服务端员工状态；离职、禁用或 JWT 无效时拒绝所有小时申请。
+- 文件服务在列表、元数据读取、下载前也必须校验员工 active 状态。
 
 ## POST /auth/mock-login
 
@@ -132,7 +133,7 @@ API 使用 FastAPI 风格建模。阶段一只定义接口契约和 payload，�
 
 ## POST /files
 
-上传密文文件和加密头。文件服务不接触明文。
+上传密文文件和加密头。文件服务不接触明文，但会校验上传者 JWT 和员工 active 状态。
 
 ### Request
 
@@ -197,7 +198,7 @@ API 使用 FastAPI 风格建模。阶段一只定义接口契约和 payload，�
 
 ## GET /files
 
-返回当前用户可见的密文文件列表。
+返回当前 active 用户可见的密文文件列表。离职或禁用用户返回 `403 Forbidden`。
 
 ### Response 200
 
@@ -218,7 +219,7 @@ API 使用 FastAPI 风格建模。阶段一只定义接口契约和 payload，�
 
 ## GET /files/{file_id}
 
-返回一个密文文件的元数据，不返回密文内容。
+返回一个密文文件的元数据，不返回密文内容。文件服务必须确认用户仍 active，且用户是 owner 或 recipient。
 
 ### Response 200
 
@@ -237,7 +238,7 @@ API 使用 FastAPI 风格建模。阶段一只定义接口契约和 payload，�
 
 ## GET /files/{file_id}/download
 
-下载密文文件和加密头。
+下载密文文件和加密头。文件服务必须确认用户仍 active，且用户是 owner 或 recipient。
 
 ### Response 200
 
@@ -249,7 +250,7 @@ API 使用 FastAPI 风格建模。阶段一只定义接口契约和 payload，�
 ### Errors
 
 - `401 Unauthorized`: JWT 缺失或无效。
-- `403 Forbidden`: 当前用户既不是 owner，也不在接收者列表中。
+- `403 Forbidden`: 当前用户已离职、被禁用，或既不是 owner 也不在接收者列表中。
 - `404 Not Found`: 文件不存在。
 
 ## POST /benchmarks/ibe

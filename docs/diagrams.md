@@ -8,6 +8,7 @@ flowchart LR
   C -->|"GET 公共参数 / POST 请求小时私钥"| PKG["PKG 企业密钥中心"]
   C -->|"上传 / 下载密文文件"| FS["文件服务 / 密文仓库"]
   PKG -->|"员工 active 状态"| UDB[("用户与授权库")]
+  FS -->|"员工 active 状态 / 文件 ACL"| UDB
   FS -->|"密文、header、审计事件"| FDB[("文件元数据 + 本地密文存储")]
 ```
 
@@ -35,6 +36,7 @@ flowchart TB
   CLI -->|"拉取公共参数和请求小时私钥"| PKG
   CLI -->|"上传/下载密文"| FileAPI
   PKG --> UserStore
+  FileAPI --> UserStore
   FileAPI --> FileStore
 ```
 
@@ -72,8 +74,10 @@ sequenceDiagram
   Receiver->>SSO: POST /auth/mock-login
   SSO-->>Receiver: JWT
   Receiver->>FS: GET /files/{file_id}/download
+  FS->>FS: 校验 JWT、active 状态、owner/recipient 权限
   FS-->>Receiver: 密文 + EncryptedFileHeader
   Receiver->>PKG: POST /pkg/private-keys/request(header 中的 hour)
+  PKG->>PKG: 再次校验员工 active 状态
   PKG-->>Receiver: KeyPackage(请求小时私钥)
   Receiver->>Receiver: 匹配 RecipientCiphertext.time_bound_id
   Receiver->>Receiver: 按 chunk 运行 BasicIdent 或 FullIdent 解密
@@ -89,6 +93,7 @@ sequenceDiagram
   participant FS as 文件服务
 
   Client->>FS: 08:00 下载 02 点加密的文件
+  FS->>FS: 校验用户 active 且为文件接收者
   FS-->>Client: header.encryption_hour = 2026-05-17-02
   Client->>PKG: POST /pkg/private-keys/request(2026-05-17-02)
   PKG->>PKG: 校验 JWT 与员工 active 状态
@@ -105,12 +110,13 @@ sequenceDiagram
   participant PKG as PKG 服务
   participant FS as 文件服务
 
-  Client->>FS: 下载旧文件 header
-  FS-->>Client: header.encryption_hour = 2026-05-17-02
-  Client->>PKG: POST /pkg/private-keys/request(2026-05-17-02)
+  Client->>FS: GET /files/{file_id}/download
+  FS->>FS: 员工状态 = inactive / resigned
+  FS-->>Client: 403 Forbidden
+  Client-->>Client: 无法获得密文和 header
+  Client->>PKG: 若绕过文件服务再申请私钥
   PKG->>PKG: 员工状态 = inactive / resigned
   PKG-->>Client: 403 Forbidden
-  Client-->>Client: 无法解密任何小时的旧文件
 ```
 
 ## BasicIdent 与 FullIdent 对比流程

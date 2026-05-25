@@ -33,7 +33,7 @@ PKG 不保存业务文件，也不接触文件明文。它只根据 `MasterSecre
 
 - 接收客户端上传的密文文件和 `EncryptedFileHeader`。
 - 保存文件元数据、接收者列表、密文哈希和审计事件。
-- 根据 JWT 限制文件列表、元数据读取和下载。
+- 根据 JWT、员工 active 状态、owner/recipient 关系限制文件列表、元数据读取和下载。
 - 不持有 `MasterSecret`、用户小时私钥或文件明文。
 
 阶段一默认使用本地磁盘模拟密文对象存储，后续可以替换为 NAS 或对象存储。
@@ -85,7 +85,7 @@ alice@company.com||2026-05-17-14
 5. PKG 从 `MasterSecret` 派生对应小时私钥，返回一个或多个 `KeyPackage`。
 6. 客户端只在当前会话中缓存私钥，用完后清理。
 
-该策略的安全边界是“发放时员工是否合法”。只要员工仍在职，他可以申请任意时间段私钥来访问旧文件；一旦离职或禁用，PKG 停止发放任何小时的私钥。
+该策略的安全边界是“访问时员工是否合法”。只要员工仍在职，他可以下载自己有权访问的密文，并申请任意时间段私钥来访问旧文件；一旦离职或禁用，文件服务停止提供列表/下载，PKG 也停止发放任何小时的私钥。
 
 ## 加密数据流
 
@@ -98,12 +98,13 @@ alice@company.com||2026-05-17-14
 
 ## 解密数据流
 
-1. 接收者客户端下载密文文件和 `EncryptedFileHeader`。
-2. 客户端从 header 中读取自己的 `time_bound_id`，向 PKG 申请该小时私钥。
-3. 客户端在 header 中查找自己的 `RecipientCiphertext`。
-4. 若 `RecipientCiphertext.time_bound_id` 与申请到的私钥 `time_bound_id` 不一致，则拒绝解密。
-5. 若一致，客户端按 chunk 顺序运行 BasicIdent 或 FullIdent 解密。
-6. FullIdent 对篡改密文执行 `U = rP` 校验，不通过则拒绝；BasicIdent 只作为 IND-ID-CPA 基线，不提供同等级 CCA 篡改检测。
+1. 接收者客户端向文件服务请求密文文件和 `EncryptedFileHeader`。
+2. 文件服务校验 JWT、员工 active 状态，并确认用户是 owner 或 recipient。
+3. 通过后，客户端下载密文并从 header 中读取自己的 `time_bound_id`。
+4. 客户端向 PKG 申请该小时私钥；PKG 再次校验员工 active 状态。
+5. 客户端在 header 中查找自己的 `RecipientCiphertext`，并校验其 `time_bound_id` 与申请到的私钥一致。
+6. 若一致，客户端按 chunk 顺序运行 BasicIdent 或 FullIdent 解密。
+7. FullIdent 对篡改密文执行 `U = rP` 校验，不通过则拒绝；BasicIdent 只作为 IND-ID-CPA 基线，不提供同等级 CCA 篡改检测。
 
 ## 任意时间私钥申请
 
@@ -123,7 +124,7 @@ alice@company.com||2026-05-17-02
 2026-05-17-04
 ```
 
-如果员工已离职、禁用或 JWT 失效，PKG 拒绝所有小时的私钥申请。因此旧文件能否访问取决于“访问时是否仍是合法员工”，而不是文件发送时间是否过期。
+如果员工已离职、禁用或 JWT 失效，文件服务会先拒绝列表、元数据读取和下载；即便绕过文件服务拿到旧密文，PKG 也会拒绝所有小时的私钥申请。因此旧文件能否访问取决于“访问时是否仍是合法员工”，而不是文件发送时间是否过期。
 
 ## BasicIdent 与 FullIdent 性能实验
 
@@ -148,7 +149,7 @@ alice@company.com||2026-05-17-02
 本阶段明确以下边界：
 
 - 文件服务泄露：攻击者只能获得密文、加密头和元数据，不能直接解密文件。
-- 员工离职或禁用：PKG 不再为该员工发放任何小时或时间段的私钥。
+- 员工离职或禁用：文件服务拒绝下载，PKG 不再为该员工发放任何小时或时间段的私钥。
 - 密文篡改：阶段二通过 FullIdent 的 Fujisaki-Okamoto 校验拦截；BasicIdent 仅作为 CPA 基线用于对比。
 - 时钟漂移：PKG 时间为准，客户端时间只用于审计和偏差提示。
 

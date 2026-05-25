@@ -9,7 +9,7 @@
 | `subject` | string | 企业身份系统中的稳定用户 ID |
 | `email` | string | 员工邮箱，作为 IBE 身份前缀 |
 | `roles` | string[] | 员工角色，如 `employee`、`admin` |
-| `active` | boolean | 是否允许 PKG 发放任意请求小时的私钥 |
+| `active` | boolean | 是否允许文件服务提供访问，以及是否允许 PKG 发放任意请求小时的私钥 |
 
 ## TimeBoundIdentity
 
@@ -27,7 +27,7 @@ IBE 公钥身份字符串。阶段一固定使用 `email||YYYY-MM-DD-HH`，合�
 alice@company.com||2026-05-17-14
 ```
 
-文件 header 会记录加密时使用的小时。接收者访问旧文件时，客户端按 header 中的小时向 PKG 申请对应私钥；PKG 只检查接收者当前是否仍是合法员工。
+文件 header 会记录加密时使用的小时。接收者访问旧文件时，文件服务先检查接收者当前是否仍是合法员工，再返回密文；随后客户端按 header 中的小时向 PKG 申请对应私钥。
 
 ## PublicParameters
 
@@ -135,7 +135,7 @@ PKG 为合法员工、请求小时派生的 IBE 私钥。
 
 ## AuditEvent
 
-PKG 和文件服务的审计事件。
+PKG 和文件服务的审计事件。文件服务应记录 active 校验失败、非 owner/recipient 访问、下载成功等事件；PKG 应记录私钥发放和拒绝事件。
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
