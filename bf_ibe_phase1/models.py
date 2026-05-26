@@ -1,8 +1,13 @@
-"""Data contracts for phase one of the BF-IBE file distribution system.
+"""系统中的数据结构。
 
-The classes in this module are intentionally lightweight. They model the
-interfaces and payloads that later phases will wire to BasicIdent and
-FullIdent from the Boneh-Franklin IBE paper.
+这里的 dataclass 相当于“接口文档里的 JSON schema”：
+
+- PKG 返回什么；
+- 文件服务保存什么；
+- 客户端解密需要从 header 里读什么。
+
+这些类尽量只表达数据，不写复杂业务逻辑，方便后续替换成 Pydantic /
+FastAPI schema。
 """
 
 from __future__ import annotations
@@ -20,7 +25,11 @@ HOUR_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}-\d{2}$")
 
 @dataclass(frozen=True)
 class PublicParameters:
-    """Public BF-IBE parameters distributed to every client."""
+    """BF-IBE 公共参数。
+
+    客户端加密只需要这些公共参数和接收者 ID，不需要接收者提前生成证书。
+    `public_point_b64` 对应论文里的 Ppub = sP。
+    """
 
     scheme: str
     curve: str
@@ -37,10 +46,10 @@ class PublicParameters:
 
 @dataclass(frozen=True)
 class MasterSecret:
-    """PKG-only master secret material.
+    """PKG 主密钥引用。
 
-    This object must never be serialized into client or file-service payloads.
-    It exists in phase one to document the boundary of the PKG.
+    真实系统中这里应该接 HSM/KMS/密钥保险箱。它绝不能出现在客户端、
+    文件服务或日志里。
     """
 
     secret_scalar_ref: str
@@ -51,7 +60,7 @@ class MasterSecret:
 
 @dataclass(frozen=True)
 class PrivateKey:
-    """A user private key extracted for one time-bound identity."""
+    """PKG 为某个 `email||hour` 身份派生出的用户私钥 d_ID。"""
 
     time_bound_id: str
     recipient_email: str
@@ -64,7 +73,11 @@ class PrivateKey:
 
 @dataclass(frozen=True)
 class TimeBoundIdentity:
-    """Canonical `email||YYYY-MM-DD-HH` identity used as an IBE public key."""
+    """IBE 公钥身份：`email||YYYY-MM-DD-HH`。
+
+    这就是论文里的 ID。发送者用这个字符串加密；接收者向 PKG 申请同一
+    字符串对应的私钥。
+    """
 
     email: str
     hour: str
@@ -75,6 +88,7 @@ class TimeBoundIdentity:
 
     @classmethod
     def for_hour(cls, email: str, moment: datetime) -> TimeBoundIdentity:
+        """根据具体时间自动取整到 UTC 小时。"""
         if moment.tzinfo is None:
             raise ValueError("moment must include timezone information")
         normalized = moment.astimezone(timezone.utc)
@@ -82,12 +96,14 @@ class TimeBoundIdentity:
 
     @classmethod
     def for_requested_hour(cls, email: str, requested_hour: str) -> TimeBoundIdentity:
+        """根据客户端显式请求的小时构造 ID。"""
         if not HOUR_PATTERN.match(requested_hour):
             raise ValueError("requested_hour must use YYYY-MM-DD-HH")
         return cls(email=email.strip().lower(), hour=requested_hour)
 
     @classmethod
     def parse(cls, value: str) -> TimeBoundIdentity:
+        """从 header 或 API 字符串中解析 `email||hour`。"""
         parts = value.split(TIME_BOUND_ID_SEPARATOR)
         if len(parts) != 2 or not parts[0] or not HOUR_PATTERN.match(parts[1]):
             raise ValueError("time-bound identity must use email||YYYY-MM-DD-HH")
@@ -96,7 +112,7 @@ class TimeBoundIdentity:
 
 @dataclass(frozen=True)
 class KeyPackage:
-    """Private-key response returned by the PKG to an authenticated client."""
+    """PKG 给客户端的私钥响应包。"""
 
     subject_email: str
     server_hour: str
@@ -107,7 +123,11 @@ class KeyPackage:
 
 @dataclass(frozen=True)
 class RecipientCiphertext:
-    """Direct BasicIdent or FullIdent ciphertext for one recipient and chunk."""
+    """某个接收者、某个 chunk 的 IBE 密文。
+
+    BasicIdent 使用 U/V 两个分量；FullIdent 使用 U/V/W 三个分量。
+    同一文件发给多个人时，每个接收者都会有自己的 RecipientCiphertext。
+    """
 
     recipient_email: str
     time_bound_id: str
@@ -119,9 +139,11 @@ class RecipientCiphertext:
 
     @property
     def is_full_ident(self) -> bool:
+        """方便测试和业务代码判断当前条目是否是 FullIdent。"""
         return self.scheme_mode == "FullIdent"
 
     def with_v_b64(self, value: str) -> RecipientCiphertext:
+        """生成一个篡改 V 分量后的副本，用于 FullIdent 防篡改测试。"""
         return RecipientCiphertext(
             recipient_email=self.recipient_email,
             time_bound_id=self.time_bound_id,
@@ -135,7 +157,11 @@ class RecipientCiphertext:
 
 @dataclass(frozen=True)
 class EncryptedFileHeader:
-    """Metadata needed by the client to decrypt direct IBE ciphertext chunks."""
+    """密文文件头。
+
+    文件服务保存密文文件本体，同时保存/返回这个 header。客户端靠 header
+    找到自己的 time_bound_id、chunk 列表和算法模式。
+    """
 
     file_id: str
     algorithm: str
@@ -157,7 +183,7 @@ class EncryptedFileHeader:
 
 @dataclass(frozen=True)
 class UserPrincipal:
-    """Authenticated employee identity extracted from a mock SSO JWT."""
+    """从模拟 JWT 解析出的员工身份。"""
 
     subject: str
     email: str
@@ -167,7 +193,7 @@ class UserPrincipal:
 
 @dataclass(frozen=True)
 class FileMetadata:
-    """File-service metadata for a stored ciphertext object."""
+    """文件服务给列表/详情接口返回的元数据。"""
 
     file_id: str
     owner_email: str
@@ -181,7 +207,7 @@ class FileMetadata:
 
 @dataclass(frozen=True)
 class AuditEvent:
-    """Append-only event used for PKG and file-service audit trails."""
+    """审计事件：记录下载、拒绝、私钥发放等安全相关动作。"""
 
     event_id: str
     actor_email: str

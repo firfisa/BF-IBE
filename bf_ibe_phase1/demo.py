@@ -1,4 +1,15 @@
-"""Command-line demo for the BF-IBE enterprise file distribution PoC."""
+"""一键命令行演示。
+
+运行：
+
+    python3 -m bf_ibe_phase1.demo
+
+演示主线：
+1. Alice 上传加密文件；
+2. Bob 作为合法员工下载并解密旧文件；
+3. Bob 离职后，文件服务和 PKG 都拒绝他继续访问；
+4. 输出 BasicIdent 和 FullIdent 的粗略耗时对比。
+"""
 
 from __future__ import annotations
 
@@ -18,7 +29,9 @@ def main() -> None:
     print()
 
     with TemporaryDirectory(prefix="bf_ibe_demo_") as tmp:
+        # 所有演示数据都放在临时目录，命令结束后自动清理。
         workdir = Path(tmp)
+        # 三个核心服务：身份系统、PKG、文件服务。
         auth = AuthService.demo()
         ibe = ToyBFIBE.setup_demo()
         pkg = PKGService(auth, ibe)
@@ -29,6 +42,7 @@ def main() -> None:
         alice_token = auth.login("alice@company.com", "demo-password")
         bob_token = auth.login("bob@company.com", "demo-password")
 
+        # 准备一份本地明文文件。客户端是唯一接触明文的地方。
         plaintext_path = workdir / "finance-report.txt"
         ciphertext_path = workdir / "finance-report.bfibe"
         download_path = workdir / "downloaded.bfibe"
@@ -44,6 +58,7 @@ def main() -> None:
         print(f"   params.version = {params.version}")
 
         print("2. Alice 使用 FullIdent 直接加密文件 chunk，发送给 Bob，身份小时=2026-05-17-02")
+        # encryption_hour 固定为 02 点，演示“Bob 之后访问旧文件时申请 02 点私钥”。
         header = encryptor.encrypt_file(
             source_path=plaintext_path,
             recipients=["bob@company.com"],
@@ -57,6 +72,7 @@ def main() -> None:
         print(f"   recipient identity = {header.recipient_ids[0]}")
 
         print("3. Bob 08:00 访问 02:00 文件：文件服务先校验 Bob 仍 active，再返回密文")
+        # 文件服务负责 active + ACL 校验；PKG 负责私钥发放校验。
         downloaded_header = file_service.download_file(bob_token, metadata.file_id, download_path)
         key_package = pkg.get_private_key(bob_token, "2026-05-17-02")
         decryptor.decrypt_file(download_path, downloaded_header, key_package, decrypted_path)
@@ -75,6 +91,7 @@ def main() -> None:
 
 
 def _print_denial(label: str, action) -> None:
+    """确认某个服务确实拒绝了离职用户。"""
     try:
         action()
     except ServiceError as exc:
@@ -84,6 +101,7 @@ def _print_denial(label: str, action) -> None:
 
 
 def _benchmark_mode(ibe: ToyBFIBE, mode: str, repeat: int = 200) -> tuple[float, float]:
+    """对 toy BasicIdent/FullIdent 做一个很粗略的平均耗时演示。"""
     identity = "bench@company.com||2026-05-17-02"
     private_key = ibe.extract_private_key(identity, "bench@company.com")
     message = b"x" * ibe.message_size_bytes
