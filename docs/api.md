@@ -1,6 +1,6 @@
 # 阶段一 API 文档
 
-API 使用 FastAPI 风格建模。阶段一只定义接口契约和 payload，不要求服务端真实运行。
+API 使用 FastAPI 风格建模。目前仓库实现的是服务层类和 CLI 演示，HTTP 服务可按本契约接入。
 
 ## 通用约定
 
@@ -50,17 +50,17 @@ API 使用 FastAPI 风格建模。阶段一只定义接口契约和 payload，�
 
 ```json
 {
-  "scheme": "BF-IBE-DIRECT",
-  "curve": "BN254",
-  "pairing": "type-3",
+  "scheme": "BF-IBE-DIRECT-BLS12-381",
+  "curve": "BLS12-381",
+  "pairing": "optimal Ate pairing on BLS12-381, e: G2 x G1 -> GT",
   "generator_g1_b64": "base64...",
   "public_point_b64": "base64...",
-  "hash_to_point": "RFC9380-SHA256",
-  "hash_h2": "SHA256-to-mask",
+  "hash_to_point": "IETF hash_to_curve hash_to_G2 with SHA-256",
+  "hash_h2": "SHA256-XOF mask over serialized GT",
   "hash_h3": "SHA256-to-Zq",
   "hash_h4": "SHA256-to-mask",
   "message_size_bits": 256,
-  "version": "pp-2026-05"
+  "version": "bls12-381-pairing-v1"
 }
 ```
 
@@ -109,17 +109,17 @@ API 使用 FastAPI 风格建模。阶段一只定义接口契约和 payload，�
     }
   ],
   "public_parameters": {
-    "scheme": "BF-IBE-DIRECT",
-    "curve": "BN254",
-    "pairing": "type-3",
+    "scheme": "BF-IBE-DIRECT-BLS12-381",
+    "curve": "BLS12-381",
+    "pairing": "optimal Ate pairing on BLS12-381, e: G2 x G1 -> GT",
     "generator_g1_b64": "base64...",
     "public_point_b64": "base64...",
-    "hash_to_point": "RFC9380-SHA256",
-    "hash_h2": "SHA256-to-mask",
+    "hash_to_point": "IETF hash_to_curve hash_to_G2 with SHA-256",
+    "hash_h2": "SHA256-XOF mask over serialized GT",
     "hash_h3": "SHA256-to-Zq",
     "hash_h4": "SHA256-to-mask",
     "message_size_bits": 256,
-    "version": "pp-2026-05"
+    "version": "bls12-381-pairing-v1"
   },
   "authorization_policy": "keys are issued only while the employee is active",
   "ntp_policy": "PKG server time is authoritative for audit and employee-state checks"
@@ -148,7 +148,7 @@ API 使用 FastAPI 风格建模。阶段一只定义接口契约和 payload，�
 {
   "file_id": "file-001",
   "schema_version": "phase1.v1",
-  "algorithm": "BF-IBE-FULLIDENT-DIRECT",
+  "algorithm": "BF-IBE-FULLIDENT-DIRECT-BLS12-381",
   "encryption_hour": "2026-05-17-14",
   "chunk_size_bytes": 32,
   "ciphertext_sha256": "abc123",
@@ -158,7 +158,7 @@ API 使用 FastAPI 风格建模。阶段一只定义接口契约和 payload，�
       "time_bound_id": "alice@company.com||2026-05-17-14",
       "scheme_mode": "FullIdent",
       "chunk_index": 0,
-      "u_b64": "base64...",
+      "u_b64": "base64 encoded BLS12-381 G1 point U=rP",
       "v_b64": "base64...",
       "w_b64": "base64..."
     },

@@ -15,7 +15,7 @@ from pathlib import Path
 import shutil
 
 from bf_ibe_phase1.auth import AuthError, AuthService
-from bf_ibe_phase1.crypto_core import ToyBFIBE
+from bf_ibe_phase1.crypto_core import BLS12381BFIBE, ToyBFIBE
 from bf_ibe_phase1.models import EncryptedFileHeader, FileMetadata, KeyPackage, TimeBoundIdentity
 
 
@@ -43,7 +43,7 @@ class PKGService:
     是否仍是 active 员工。
     """
 
-    def __init__(self, auth: AuthService, ibe: ToyBFIBE):
+    def __init__(self, auth: AuthService, ibe: BLS12381BFIBE | ToyBFIBE):
         self.auth = auth
         self.ibe = ibe
 

@@ -18,14 +18,14 @@ from tempfile import TemporaryDirectory
 from time import perf_counter
 
 from bf_ibe_phase1.auth import AuthService
-from bf_ibe_phase1.crypto_core import ToyBFIBE
+from bf_ibe_phase1.crypto_core import BLS12381BFIBE
 from bf_ibe_phase1.demo_services import FileService, PKGService, ServiceError
 from bf_ibe_phase1.direct_file_crypto import DirectIBEFileDecryptor, DirectIBEFileEncryptor
 
 
 def main() -> None:
     print("BF-IBE 企业文件分发 PoC 演示")
-    print("注意：当前 crypto core 是教学用 toy pairing 模型，不是生产级密码库。")
+    print("当前 crypto core 使用 BLS12-381 G1/G2 曲线点和 optimal Ate pairing。")
     print()
 
     with TemporaryDirectory(prefix="bf_ibe_demo_") as tmp:
@@ -33,7 +33,7 @@ def main() -> None:
         workdir = Path(tmp)
         # 三个核心服务：身份系统、PKG、文件服务。
         auth = AuthService.demo()
-        ibe = ToyBFIBE.setup_demo()
+        ibe = BLS12381BFIBE.setup_demo()
         pkg = PKGService(auth, ibe)
         file_service = FileService(auth, workdir / "storage")
         encryptor = DirectIBEFileEncryptor(ibe)
@@ -100,8 +100,8 @@ def _print_denial(label: str, action) -> None:
         raise RuntimeError(f"{label} unexpectedly allowed resigned user")
 
 
-def _benchmark_mode(ibe: ToyBFIBE, mode: str, repeat: int = 200) -> tuple[float, float]:
-    """对 toy BasicIdent/FullIdent 做一个很粗略的平均耗时演示。"""
+def _benchmark_mode(ibe: BLS12381BFIBE, mode: str, repeat: int = 5) -> tuple[float, float]:
+    """对真实 pairing 后端的 BasicIdent/FullIdent 做粗略平均耗时演示。"""
     identity = "bench@company.com||2026-05-17-02"
     private_key = ibe.extract_private_key(identity, "bench@company.com")
     message = b"x" * ibe.message_size_bytes

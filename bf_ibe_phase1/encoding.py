@@ -1,8 +1,8 @@
 """序列化工具。
 
 密文、曲线点、私钥这些二进制数据通常不能直接放进 JSON，所以演示代码
-统一用 URL-safe base64 转成字符串。toy 实现里的“点/标量”是整数，也通过
-int <-> bytes <-> base64 存储。
+统一用 URL-safe base64 转成字符串。BLS12-381 后端会序列化真实 G1/G2
+曲线点；toy 对照实现里的“点/标量”仍通过 int <-> bytes <-> base64 存储。
 """
 
 from __future__ import annotations

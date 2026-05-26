@@ -30,7 +30,7 @@ class PhaseOneModelTests(unittest.TestCase):
     def test_encrypted_file_header_supports_multiple_direct_ibe_ciphertexts(self):
         header = EncryptedFileHeader(
             file_id="file-001",
-            algorithm="BF-IBE-FULLIDENT-DIRECT",
+            algorithm="BF-IBE-FULLIDENT-DIRECT-BLS12-381",
             encryption_hour="2026-05-17-14",
             ciphertext_sha256="abc123",
             recipients=[

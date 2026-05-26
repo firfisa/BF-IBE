@@ -2,7 +2,7 @@
 
 from bf_ibe_phase1.auth import AuthService
 from bf_ibe_phase1.crypto_interfaces import FileDecryptor, FileEncryptor
-from bf_ibe_phase1.crypto_core import ToyBFIBE
+from bf_ibe_phase1.crypto_core import BLS12381BFIBE, ToyBFIBE
 from bf_ibe_phase1.demo_services import FileService, PKGService, ServiceError
 from bf_ibe_phase1.direct_file_crypto import DirectIBEFileDecryptor, DirectIBEFileEncryptor
 from bf_ibe_phase1.models import (
@@ -22,6 +22,7 @@ from bf_ibe_phase1.service_interfaces import FileServerClient, PKGClient
 __all__ = [
     "AuditEvent",
     "AuthService",
+    "BLS12381BFIBE",
     "DirectIBEFileDecryptor",
     "DirectIBEFileEncryptor",
     "EncryptedFileHeader",

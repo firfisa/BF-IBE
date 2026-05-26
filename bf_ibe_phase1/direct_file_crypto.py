@@ -19,7 +19,7 @@ import json
 from pathlib import Path
 import uuid
 
-from bf_ibe_phase1.crypto_core import ToyBFIBE
+from bf_ibe_phase1.crypto_core import BLS12381BFIBE, ToyBFIBE
 from bf_ibe_phase1.crypto_interfaces import FileDecryptor, FileEncryptor
 from bf_ibe_phase1.models import EncryptedFileHeader, KeyPackage, PublicParameters, TimeBoundIdentity
 
@@ -27,7 +27,7 @@ from bf_ibe_phase1.models import EncryptedFileHeader, KeyPackage, PublicParamete
 class DirectIBEFileEncryptor(FileEncryptor):
     """把普通文件转换成 direct IBE 密文文件和 header。"""
 
-    def __init__(self, ibe: ToyBFIBE):
+    def __init__(self, ibe: BLS12381BFIBE | ToyBFIBE):
         self.ibe = ibe
 
     def encrypt_file(
@@ -69,7 +69,7 @@ class DirectIBEFileEncryptor(FileEncryptor):
 
         return EncryptedFileHeader(
             file_id=f"file-{uuid.uuid4().hex[:12]}",
-            algorithm=f"BF-IBE-{scheme_mode.upper()}-DIRECT-TOY",
+            algorithm=f"BF-IBE-{scheme_mode.upper()}-DIRECT-{public_parameters.curve}",
             encryption_hour=hour,
             ciphertext_sha256=hashlib.sha256(encoded_payload).hexdigest(),
             recipients=ciphertexts,
@@ -78,7 +78,7 @@ class DirectIBEFileEncryptor(FileEncryptor):
                 "original_filename": source_path.name,
                 # 解密时要把最后一个 chunk 的 padding 去掉，所以保存原始长度。
                 "original_size": len(plaintext),
-                "demo_notice": "Educational direct IBE ciphertext, not production crypto",
+                "demo_notice": "Direct BasicIdent/FullIdent ciphertext for coursework PoC; KEM-DEM remains the large-file production path.",
             },
         )
 
@@ -86,7 +86,7 @@ class DirectIBEFileEncryptor(FileEncryptor):
 class DirectIBEFileDecryptor(FileDecryptor):
     """用 PKG 返回的私钥包恢复文件明文。"""
 
-    def __init__(self, ibe: ToyBFIBE):
+    def __init__(self, ibe: BLS12381BFIBE | ToyBFIBE):
         self.ibe = ibe
 
     def decrypt_file(

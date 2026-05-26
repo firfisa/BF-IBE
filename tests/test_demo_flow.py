@@ -3,9 +3,10 @@ from tempfile import TemporaryDirectory
 import unittest
 
 from bf_ibe_phase1.auth import AuthService
-from bf_ibe_phase1.crypto_core import ToyBFIBE
+from bf_ibe_phase1.crypto_core import BLS12381BFIBE, ToyBFIBE
 from bf_ibe_phase1.demo_services import FileService, PKGService, ServiceError
 from bf_ibe_phase1.direct_file_crypto import DirectIBEFileDecryptor, DirectIBEFileEncryptor
+from bf_ibe_phase1.encoding import b64decode, b64encode
 
 
 class ToyBFIBETests(unittest.TestCase):
@@ -32,12 +33,48 @@ class ToyBFIBETests(unittest.TestCase):
             ibe.decrypt_block(tampered, private_key)
 
 
+class BLS12381BFIBETests(unittest.TestCase):
+    def test_full_ident_uses_real_curve_point_u_and_pairing(self):
+        ibe = BLS12381BFIBE.setup_demo()
+        identity = "bob@company.com||2026-05-17-02"
+        private_key = ibe.extract_private_key(identity, "bob@company.com")
+
+        ciphertext = ibe.encrypt_block(identity, b"real pairing", "FullIdent", 0)
+        plaintext = ibe.decrypt_block(ciphertext, private_key)
+
+        self.assertEqual(plaintext[:12], b"real pairing")
+        self.assertEqual(len(b64decode(ciphertext.u_b64)), 96)
+        self.assertTrue(ibe.is_serialized_g1_point(ciphertext.u_b64))
+        self.assertIn("optimal Ate", ibe.public_parameters.pairing)
+
+    def test_full_ident_rejects_tampered_curve_point_u(self):
+        ibe = BLS12381BFIBE.setup_demo()
+        identity = "bob@company.com||2026-05-17-02"
+        private_key = ibe.extract_private_key(identity, "bob@company.com")
+        ciphertext = ibe.encrypt_block(identity, b"attack check", "FullIdent", 0)
+
+        raw_u = bytearray(b64decode(ciphertext.u_b64))
+        raw_u[-1] ^= 1
+        tampered = type(ciphertext)(
+            recipient_email=ciphertext.recipient_email,
+            time_bound_id=ciphertext.time_bound_id,
+            scheme_mode=ciphertext.scheme_mode,
+            chunk_index=ciphertext.chunk_index,
+            u_b64=b64encode(bytes(raw_u)),
+            v_b64=ciphertext.v_b64,
+            w_b64=ciphertext.w_b64,
+        )
+
+        with self.assertRaises(ValueError):
+            ibe.decrypt_block(tampered, private_key)
+
+
 class DemoServiceFlowTests(unittest.TestCase):
     def test_active_user_can_decrypt_old_file_and_resigned_user_is_denied(self):
         with TemporaryDirectory() as tmp:
             workdir = Path(tmp)
             auth = AuthService.demo()
-            ibe = ToyBFIBE.setup_demo()
+            ibe = BLS12381BFIBE.setup_demo()
             pkg = PKGService(auth, ibe)
             files = FileService(auth, workdir / "storage")
             encryptor = DirectIBEFileEncryptor(ibe)

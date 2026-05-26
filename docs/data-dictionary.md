@@ -35,13 +35,13 @@ alice@company.com||2026-05-17-14
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `scheme` | string | `BF-IBE-DIRECT` |
-| `curve` | string | 椭圆曲线或双线性群参数名称 |
-| `pairing` | string | 配对类型描述 |
-| `generator_g1_b64` | string | G1 生成元序列化值 |
-| `public_point_b64` | string | 主公钥点序列化值 |
-| `hash_to_point` | string | Hash-to-Point 方案 |
-| `hash_h2` | string | BasicIdent/FullIdent 中从 `G2` 派生掩码的哈希 |
+| `scheme` | string | `BF-IBE-DIRECT-BLS12-381` |
+| `curve` | string | `BLS12-381` |
+| `pairing` | string | `optimal Ate pairing on BLS12-381, e: G2 x G1 -> GT` |
+| `generator_g1_b64` | string | G1 生成元 `P` 序列化值 |
+| `public_point_b64` | string | 主公钥点 `Ppub=sP` 的 G1 序列化值 |
+| `hash_to_point` | string | Hash-to-Point 方案；当前为 hash_to_G2/SHA-256 |
+| `hash_h2` | string | BasicIdent/FullIdent 中从 `GT` 配对结果派生掩码的哈希 |
 | `hash_h3` | string/null | FullIdent 中从 `sigma, M` 派生 `r` 的哈希 |
 | `hash_h4` | string/null | FullIdent 中从 `sigma` 派生消息掩码的哈希 |
 | `message_size_bits` | integer | 论文算法单次加密的定长消息位数 |
@@ -67,7 +67,7 @@ PKG 为合法员工、请求小时派生的 IBE 私钥。
 | `time_bound_id` | string | 对应 `email||YYYY-MM-DD-HH` |
 | `recipient_email` | string | 私钥所属员工邮箱 |
 | `valid_hour` | string | 私钥对应的请求小时 |
-| `private_key_b64` | string | 序列化私钥 |
+| `private_key_b64` | string | 序列化私钥；BLS12-381 后端中是 G2 点 `d_ID=sQ_ID` |
 | `issued_at` | datetime | PKG 发放时间 |
 | `expires_at` | datetime | 客户端缓存过期时间；不改变 `valid_hour` 的密码学含义 |
 | `public_parameters_version` | string | 对应公共参数版本 |
@@ -94,7 +94,7 @@ PKG 为合法员工、请求小时派生的 IBE 私钥。
 | `time_bound_id` | string | 接收者小时 ID |
 | `scheme_mode` | string | `BasicIdent` 或 `FullIdent` |
 | `chunk_index` | integer | 文件 chunk 序号 |
-| `u_b64` | string | 论文密文分量 `U = rP` |
+| `u_b64` | string | 论文密文分量 `U = rP`；BLS12-381 后端中是 96 字节 G1 点序列化，不保存裸 `r` |
 | `v_b64` | string | BasicIdent/FullIdent 的 `V` 分量 |
 | `w_b64` | string/null | FullIdent 的 `W` 分量；BasicIdent 为 null |
 
@@ -106,7 +106,7 @@ PKG 为合法员工、请求小时派生的 IBE 私钥。
 | --- | --- | --- |
 | `file_id` | string | 文件唯一 ID |
 | `schema_version` | string | header schema 版本，默认 `phase1.v1` |
-| `algorithm` | string | 加密套件，如 `BF-IBE-BASICIDENT-DIRECT` 或 `BF-IBE-FULLIDENT-DIRECT` |
+| `algorithm` | string | 加密套件，如 `BF-IBE-BASICIDENT-DIRECT-BLS12-381` 或 `BF-IBE-FULLIDENT-DIRECT-BLS12-381` |
 | `encryption_hour` | string | 文件加密小时 |
 | `ciphertext_sha256` | string | 密文 SHA-256 |
 | `recipients` | RecipientCiphertext[] | 多接收者、多小时、多 chunk 密文列表 |

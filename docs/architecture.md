@@ -2,16 +2,16 @@
 
 ## 目标
 
-本阶段完成“业务逻辑”到“密码学核心”的映射，不实现真实 BF-IBE 算法。系统按课程 PoC 定位设计，强调概念完整、边界清晰、便于答辩演示和后续阶段二开发。
+本阶段完成“业务逻辑”到“密码学核心”的映射，并在阶段二开始接入真实 pairing 后端。系统按课程 PoC 定位设计，强调概念完整、边界清晰、便于答辩演示和后续扩展。
 
 核心能力是企业员工在客户端加密文件后上传到文件服务。文件服务只能保存密文和元数据，无法解密内容。接收者客户端从文件 header 读取密文使用的小时，再向 PKG 申请该小时的 BF-IBE 私钥，并用该私钥直接解密匹配的 IBE 密文块。
 
-根据 Boneh-Franklin 论文，阶段二直接实现两个论文算法并做实验对比：
+根据 Boneh-Franklin 论文，密码学核心直接实现两个论文算法并做实验对比：
 
 - `BasicIdent`: 论文 Section 4.1 的基础 IBE，安全目标为 IND-ID-CPA。
 - `FullIdent`: 论文 Section 4.2 中经 Fujisaki-Okamoto 转换后的完整 IBE，安全目标为 IND-ID-CCA。
 
-论文算法的消息空间是定长 `M ∈ {0,1}^n`。因此直接加密文件时，客户端需要把文件切成固定大小 chunk，每个 chunk 都生成一个 BasicIdent 或 FullIdent 密文。该设计牺牲大文件效率，但能清晰比较 CPA 与 CCA 安全模式的计算代价。
+论文算法的消息空间是定长 `M ∈ {0,1}^n`。因此直接加密文件时，客户端需要把文件切成固定大小 chunk，每个 chunk 都生成一个 BasicIdent 或 FullIdent 密文。该设计牺牲大文件效率，但能清晰比较 CPA 与 CCA 安全模式的计算代价。当前可运行后端使用 BLS12-381 的 Type-3 pairing：`Q_ID` 和 `d_ID` 在 G2，`Ppub` 和 `U=rP` 在 G1，配对函数为 `py_ecc.optimized_bls12_381.pairing(Q_G2, P_G1)`，即 optimal Ate pairing。
 
 ## 核心实体
 
@@ -92,8 +92,8 @@ alice@company.com||2026-05-17-14
 1. 客户端获取公共参数。
 2. 客户端读取文件明文，并按 `PublicParameters.message_size_bits` 切成定长 chunk。
 3. 客户端为每个接收者和文件加密小时构造 `TimeBoundIdentity`。
-4. 在 `BasicIdent` 模式下，每个 chunk 生成论文中的 `C = <U, V>`。
-5. 在 `FullIdent` 模式下，每个 chunk 生成论文中的 `C = <U, V, W>`，并在解密时执行 `U = rP` 校验。
+4. 在 `BasicIdent` 模式下，每个 chunk 生成论文中的 `C = <U, V>`，其中 `U` 是真实序列化 G1 曲线点 `rP`，不是裸随机数 `r`。
+5. 在 `FullIdent` 模式下，每个 chunk 生成论文中的 `C = <U, V, W>`，并在解密时重新计算 `r = H3(sigma, M)` 后执行 `U = rP` 校验。
 6. 客户端将所有 `RecipientCiphertext`、密文块文件和 `EncryptedFileHeader` 上传文件服务。
 
 ## 解密数据流
@@ -130,7 +130,7 @@ alice@company.com||2026-05-17-02
 
 阶段二的实验目标是比较“获得 CCA 安全”相对 CPA 基线的开销，而不是证明 CCA 比 CPA 更快。
 
-- BasicIdent 加密密文为 `<U, V>`，解密主要成本是一次 pairing 和一次 `H2` 掩码恢复。
+- BasicIdent 加密密文为 `<U, V>`，其中 `U` 序列化为 96 字节 BLS12-381 G1 点；解密主要成本是一次 pairing 和一次 `H2` 掩码恢复。
 - FullIdent 加密密文为 `<U, V, W>`，增加 `H3`、`H4`、随机 `sigma` 和消息绑定。
 - FullIdent 解密除了 pairing，还需要恢复 `sigma`、恢复消息、重新计算 `r = H3(sigma, M)`，并检查 `U = rP`。
 - 对大文件直接 IBE 加密时，单个文件的成本随 `接收者数量 × chunk 数量` 线性增长；批量处理多个文件或多个请求小时会继续线性增加。
@@ -153,4 +153,4 @@ alice@company.com||2026-05-17-02
 - 密文篡改：阶段二通过 FullIdent 的 Fujisaki-Okamoto 校验拦截；BasicIdent 仅作为 CPA 基线用于对比。
 - 时钟漂移：PKG 时间为准，客户端时间只用于审计和偏差提示。
 
-本阶段暂不覆盖生产级 HSM、密钥分片、灾备、多 PKG 高可用、真实 SSO 对接和零信任网络策略。
+本阶段暂不覆盖生产级 HSM、密钥分片、灾备、多 PKG 高可用、真实 SSO 对接、零信任网络策略和大文件 KEM-DEM 优化。
