@@ -121,6 +121,17 @@ class RecipientCiphertext:
     def is_full_ident(self) -> bool:
         return self.scheme_mode == "FullIdent"
 
+    def with_v_b64(self, value: str) -> RecipientCiphertext:
+        return RecipientCiphertext(
+            recipient_email=self.recipient_email,
+            time_bound_id=self.time_bound_id,
+            scheme_mode=self.scheme_mode,
+            chunk_index=self.chunk_index,
+            u_b64=self.u_b64,
+            v_b64=value,
+            w_b64=self.w_b64,
+        )
+
 
 @dataclass(frozen=True)
 class EncryptedFileHeader:
