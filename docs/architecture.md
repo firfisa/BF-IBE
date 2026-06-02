@@ -1,17 +1,17 @@
-# 阶段一系统架构设计
+# 系统架构设计
 
 ## 目标
 
 本阶段完成“业务逻辑”到“密码学核心”的映射，并在阶段二开始接入真实 pairing 后端。系统按课程 PoC 定位设计，强调概念完整、边界清晰、便于答辩演示和后续扩展。
 
-核心能力是企业员工在客户端加密文件后上传到文件服务。文件服务只能保存密文和元数据，无法解密内容。接收者客户端从文件 header 读取密文使用的小时，再向 PKG 申请该小时的 BF-IBE 私钥，并用该私钥直接解密匹配的 IBE 密文块。
+核心能力是企业员工在客户端加密文件后上传到文件服务。文件服务只能保存密文和元数据，无法解密内容。默认业务路径采用 BF-IBE Dent/FO KEM + AES-256-GCM DEM：文件正文只用 AES-GCM 加密一次，每个接收者有自己的 KEM key envelope。
 
-根据 Boneh-Franklin 论文，密码学核心直接实现两个论文算法并做实验对比：
+系统同时保留 Boneh-Franklin 论文 direct IBE 算法作为实验对比：
 
 - `BasicIdent`: 论文 Section 4.1 的基础 IBE，安全目标为 IND-ID-CPA。
 - `FullIdent`: 论文 Section 4.2 中经 Fujisaki-Okamoto 转换后的完整 IBE，安全目标为 IND-ID-CCA。
 
-论文算法的消息空间是定长 `M ∈ {0,1}^n`。因此直接加密文件时，客户端需要把文件切成固定大小 chunk，每个 chunk 都生成一个 BasicIdent 或 FullIdent 密文。该设计牺牲大文件效率，但能清晰比较 CPA 与 CCA 安全模式的计算代价。当前可运行后端使用 BLS12-381 的 Type-3 pairing：`Q_ID` 和 `d_ID` 在 G2，`Ppub` 和 `U=rP` 在 G1，配对函数为 `py_ecc.optimized_bls12_381.pairing(Q_G2, P_G1)`，即 optimal Ate pairing。
+业务主路径不直接用 IBE 加密大文件 chunk，而是按协议把 BF-IBE 改造成 Dent/FO KEM。KEM 密文为 `C_KEM=(U,V)`，其中 `U=rP` 是真实 G1 曲线点；DEM 使用 AES-256-GCM 加密文件正文。当前可运行后端使用 BLS12-381 的 Type-3 pairing：`Q_ID` 和 `d_ID` 在 G2，`Ppub` 和 `U=rP` 在 G1，配对函数为 `py_ecc.optimized_bls12_381.pairing(Q_G2, P_G1)`，即 optimal Ate pairing。
 
 ## 核心实体
 
@@ -31,7 +31,7 @@ PKG 不保存业务文件，也不接触文件明文。它只根据 `MasterSecre
 
 文件服务负责密文生命周期管理：
 
-- 接收客户端上传的密文文件和 `EncryptedFileHeader`。
+- 接收客户端上传的 AES-GCM 密文文件和 `HybridEncryptedFileHeader`。
 - 保存文件元数据、接收者列表、密文哈希和审计事件。
 - 根据 JWT、员工 active 状态、owner/recipient 关系限制文件列表、元数据读取和下载。
 - 不持有 `MasterSecret`、用户小时私钥或文件明文。
@@ -44,9 +44,9 @@ PKG 不保存业务文件，也不接触文件明文。它只根据 `MasterSecre
 
 - 使用模拟 SSO 登录获得 JWT。
 - 从 PKG 获取公共参数，并按文件 header 中的小时申请解密私钥。
-- 将文件切分成固定大小 chunk。
-- 为每个接收者、每个 chunk 生成 `RecipientCiphertext`。
-- 支持 `BasicIdent` 与 `FullIdent` 两种模式，用于 CPA/CCA 性能对比。
+- 生成随机 `file_key` 并用 AES-256-GCM 加密文件正文。
+- 为每个接收者生成 BF-IBE Dent/FO KEM 密文 `(U,V)`，并用 KEM key 封装同一个 `file_key`。
+- 保留 `BasicIdent` 与 `FullIdent` direct IBE 模式，用于 CPA/CCA 性能对比。
 - 上传密文和加密头到文件服务。
 - 下载密文后，按 header 中的 `time_bound_id` 申请对应小时私钥并尝试解密。
 
@@ -90,21 +90,21 @@ alice@company.com||2026-05-17-14
 ## 加密数据流
 
 1. 客户端获取公共参数。
-2. 客户端读取文件明文，并按 `PublicParameters.message_size_bits` 切成定长 chunk。
+2. 客户端生成 256-bit `file_key`，用 AES-256-GCM 加密文件正文一次。
 3. 客户端为每个接收者和文件加密小时构造 `TimeBoundIdentity`。
-4. 在 `BasicIdent` 模式下，每个 chunk 生成论文中的 `C = <U, V>`，其中 `U` 是真实序列化 G1 曲线点 `rP`，不是裸随机数 `r`。
-5. 在 `FullIdent` 模式下，每个 chunk 生成论文中的 `C = <U, V, W>`，并在解密时重新计算 `r = H3(sigma, M)` 后执行 `U = rP` 校验。
-6. 客户端将所有 `RecipientCiphertext`、密文块文件和 `EncryptedFileHeader` 上传文件服务。
+4. 对每个接收者运行 `KEM_Encap`：生成 `sigma`，计算 `r=H3(sigma)`、`U=rP`、`V=sigma xor H2(e(Q_ID,Ppub)^r)`、`K=H4(sigma)`。
+5. 客户端用接收者的 `K` 通过 AES-GCM 封装同一个 `file_key`，生成 `RecipientKeyEnvelope`。
+6. 客户端上传一份 DEM 密文文件和 `HybridEncryptedFileHeader`。
 
 ## 解密数据流
 
-1. 接收者客户端向文件服务请求密文文件和 `EncryptedFileHeader`。
+1. 接收者客户端向文件服务请求密文文件和 `HybridEncryptedFileHeader`。
 2. 文件服务校验 JWT、员工 active 状态，并确认用户是 owner 或 recipient。
 3. 通过后，客户端下载密文并从 header 中读取自己的 `time_bound_id`。
 4. 客户端向 PKG 申请该小时私钥；PKG 再次校验员工 active 状态。
-5. 客户端在 header 中查找自己的 `RecipientCiphertext`，并校验其 `time_bound_id` 与申请到的私钥一致。
-6. 若一致，客户端按 chunk 顺序运行 BasicIdent 或 FullIdent 解密。
-7. FullIdent 对篡改密文执行 `U = rP` 校验，不通过则拒绝；BasicIdent 只作为 IND-ID-CPA 基线，不提供同等级 CCA 篡改检测。
+5. 客户端在 header 中查找自己的 `RecipientKeyEnvelope`，并校验其 `time_bound_id` 与申请到的私钥一致。
+6. 客户端运行 `KEM_Decap`：恢复 `sigma'`，重算 `r'=H3(sigma')`，严格检查 `U == r'P`。
+7. KEM 校验通过后解开 `file_key`，再用 AES-256-GCM 解密正文；任何 KEM/DEM 失败都对外统一为 `REJECT`。
 
 ## 任意时间私钥申请
 
@@ -144,13 +144,20 @@ alice@company.com||2026-05-17-02
 - `ciphertext_expansion`: BasicIdent `<U,V>` 与 FullIdent `<U,V,W>` 的密文膨胀。
 - `tamper_reject_ms`: FullIdent 篡改密文拒绝耗时。
 
+## KEM/DEM 业务安全策略
+
+- KEM 层使用 Dent/FO 去随机化和重加密校验，业务密文不包含 FullIdent 的 `W` 分量。
+- DEM 层使用 AES-256-GCM，文件正文、封装的 `file_key` 都具备认证校验。
+- 多接收者文件只保存一份 DEM 密文；每个接收者各自保存一个 KEM key envelope。
+- 客户端和服务层对 KEM 校验失败、key unwrap 失败、DEM tag 失败统一返回 `REJECT`，避免报错预言机。
+
 ## 威胁边界
 
 本阶段明确以下边界：
 
 - 文件服务泄露：攻击者只能获得密文、加密头和元数据，不能直接解密文件。
 - 员工离职或禁用：文件服务拒绝下载，PKG 不再为该员工发放任何小时或时间段的私钥。
-- 密文篡改：阶段二通过 FullIdent 的 Fujisaki-Okamoto 校验拦截；BasicIdent 仅作为 CPA 基线用于对比。
+- 密文篡改：业务路径通过 KEM 重加密校验和 AES-GCM tag 拦截；BasicIdent 仅作为 CPA 基线用于对比。
 - 时钟漂移：PKG 时间为准，客户端时间只用于审计和偏差提示。
 
-本阶段暂不覆盖生产级 HSM、密钥分片、灾备、多 PKG 高可用、真实 SSO 对接、零信任网络策略和大文件 KEM-DEM 优化。
+本阶段暂不覆盖生产级 HSM、密钥分片、灾备、多 PKG 高可用、真实 SSO 对接和零信任网络策略。

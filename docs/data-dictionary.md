@@ -1,4 +1,4 @@
-# 阶段一数据字典
+# 数据字典
 
 ## UserPrincipal
 
@@ -35,15 +35,15 @@ alice@company.com||2026-05-17-14
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `scheme` | string | `BF-IBE-DIRECT-BLS12-381` |
+| `scheme` | string | `BF-IBE-BLS12-381` |
 | `curve` | string | `BLS12-381` |
 | `pairing` | string | `optimal Ate pairing on BLS12-381, e: G2 x G1 -> GT` |
 | `generator_g1_b64` | string | G1 生成元 `P` 序列化值 |
 | `public_point_b64` | string | 主公钥点 `Ppub=sP` 的 G1 序列化值 |
 | `hash_to_point` | string | Hash-to-Point 方案；当前为 hash_to_G2/SHA-256 |
-| `hash_h2` | string | BasicIdent/FullIdent 中从 `GT` 配对结果派生掩码的哈希 |
-| `hash_h3` | string/null | FullIdent 中从 `sigma, M` 派生 `r` 的哈希 |
-| `hash_h4` | string/null | FullIdent 中从 `sigma` 派生消息掩码的哈希 |
+| `hash_h2` | string | 从 `GT` 配对结果派生种子掩码的哈希 |
+| `hash_h3` | string/null | KEM 中从 `sigma` 派生 `r`；FullIdent 对比实验中从 `sigma, M` 派生 `r` |
+| `hash_h4` | string/null | KEM 中从 `sigma` 派生 DEM 会话密钥 |
 | `message_size_bits` | integer | 论文算法单次加密的定长消息位数 |
 | `version` | string | 公共参数版本 |
 
@@ -84,6 +84,30 @@ PKG 为合法员工、请求小时派生的 IBE 私钥。
 | `public_parameters` | PublicParameters | 当前公共参数 |
 | `ntp_policy` | string | 时钟同步策略说明 |
 
+## KemCiphertext
+
+Dent/FO KEM 密文，结构为 `C_KEM=(U,V)`，不包含 FullIdent 的 `W`。
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `u_b64` | string | 96 字节 BLS12-381 G1 点 `U=rP` 的序列化值 |
+| `v_b64` | string | `sigma xor H2(e(Q_ID,Ppub)^r)` |
+| `kem_algorithm` | string | `BF-IBE-DENT-FO-KEM-BLS12-381` |
+| `seed_length_bytes` | integer | `sigma` 长度，当前为 32 |
+| `key_length_bytes` | integer | KEM 输出 key 长度，当前为 32 |
+
+## RecipientKeyEnvelope
+
+一份文件面向某个接收者的 file key 封装。
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `recipient_email` | string | 接收者邮箱 |
+| `time_bound_id` | string | 接收者小时 ID |
+| `kem_ciphertext` | KemCiphertext | 接收者自己的 BF-IBE KEM 密文 |
+| `wrap_iv_b64` | string | 封装 file key 使用的 AES-GCM IV |
+| `wrapped_file_key_b64` | string | AES-GCM 输出的 file key 密文和 tag |
+
 ## RecipientCiphertext
 
 一份文件面向一个接收者、一个小时、一个 chunk 的直接 IBE 密文条目。
@@ -117,6 +141,25 @@ PKG 为合法员工、请求小时派生的 IBE 私钥。
 
 - `recipient_count`: 接收者数量。
 - `recipient_ids`: 所有 `time_bound_id` 列表。
+
+该结构保留给 direct BasicIdent/FullIdent 论文对比实验；业务主路径使用 `HybridEncryptedFileHeader`。
+
+## HybridEncryptedFileHeader
+
+KEM/DEM 混合加密文件头。文件正文只保存一份 AES-GCM 密文；接收者差异体现在 `recipient_envelopes`。
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `file_id` | string | 文件唯一 ID |
+| `schema_version` | string | header schema 版本，默认 `phase2.hybrid.v1` |
+| `algorithm` | string | `BF-IBE-DENT-FO-KEMDEM-BLS12-381-AES-256-GCM` |
+| `encryption_hour` | string | 文件加密小时 |
+| `dem_algorithm` | string | `AES-256-GCM` |
+| `dem_iv_b64` | string | 文件正文 AES-GCM IV |
+| `dem_tag_b64` | string | 文件正文 AES-GCM tag |
+| `recipient_envelopes` | RecipientKeyEnvelope[] | 每个接收者的 KEM/DEM key envelope |
+| `ciphertext_sha256` | string | 文件正文密文 SHA-256 |
+| `metadata` | object | 原始文件名等非敏感业务元数据 |
 
 ## FileMetadata
 

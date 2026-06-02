@@ -16,7 +16,10 @@ import shutil
 
 from bf_ibe_phase1.auth import AuthError, AuthService
 from bf_ibe_phase1.crypto_core import BLS12381BFIBE, ToyBFIBE
-from bf_ibe_phase1.models import EncryptedFileHeader, FileMetadata, KeyPackage, TimeBoundIdentity
+from bf_ibe_phase1.models import EncryptedFileHeader, FileMetadata, HybridEncryptedFileHeader, KeyPackage, TimeBoundIdentity
+
+
+FileHeader = EncryptedFileHeader | HybridEncryptedFileHeader
 
 
 class ServiceError(Exception):
@@ -107,7 +110,7 @@ class FileService:
         self.auth = auth
         self.storage_dir = storage_dir
         self.storage_dir.mkdir(parents=True, exist_ok=True)
-        self._headers: dict[str, EncryptedFileHeader] = {}
+        self._headers: dict[str, FileHeader] = {}
         self._metadata: dict[str, FileMetadata] = {}
         self._paths: dict[str, Path] = {}
 
@@ -115,7 +118,7 @@ class FileService:
         self,
         jwt: str,
         ciphertext_path: Path,
-        header: EncryptedFileHeader,
+        header: FileHeader,
     ) -> FileMetadata:
         """上传密文。上传者会成为 owner。"""
         principal = self._active_principal(jwt)
@@ -154,7 +157,7 @@ class FileService:
             raise ServiceError(403, "user is not allowed to access this file")
         return metadata
 
-    def download_file(self, jwt: str, file_id: str, destination_path: Path) -> EncryptedFileHeader:
+    def download_file(self, jwt: str, file_id: str, destination_path: Path) -> FileHeader:
         """下载密文文件。
 
         离职用户会在这里被第一时间拒绝，拿不到密文和 header；PKG 的

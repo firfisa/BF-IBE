@@ -7,8 +7,8 @@
 3. 对每个接收者、每个 chunk 调用 BasicIdent 或 FullIdent；
 4. 生成 `EncryptedFileHeader`，里面记录每个 chunk 的 U/V/W。
 
-注意：这是当前“直接 IBE 加密 chunk”的演示路径；后续如果改成
-KEM-DEM/AES-GCM，大文件正文会改由 AES-GCM 加密，IBE 只封装会话密钥。
+注意：这是保留给论文 BasicIdent/FullIdent 对比实验的 direct IBE 路径。
+实际文件分发主路径已经由 hybrid_file_crypto.py 中的 KEM/DEM 实现承担。
 """
 
 from __future__ import annotations
@@ -78,7 +78,7 @@ class DirectIBEFileEncryptor(FileEncryptor):
                 "original_filename": source_path.name,
                 # 解密时要把最后一个 chunk 的 padding 去掉，所以保存原始长度。
                 "original_size": len(plaintext),
-                "demo_notice": "Direct BasicIdent/FullIdent ciphertext for coursework PoC; KEM-DEM remains the large-file production path.",
+                "demo_notice": "Direct BasicIdent/FullIdent ciphertext for coursework comparison; KEM/DEM is the main file distribution path.",
             },
         )
 

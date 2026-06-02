@@ -122,6 +122,35 @@ class KeyPackage:
 
 
 @dataclass(frozen=True)
+class KemCiphertext:
+    """Dent/FO KEM 封装密文 C_KEM = (U, V)。
+
+    KEM 只封装随机种子 sigma 并派生会话密钥，不包含 FullIdent PKE 的 W 分量。
+    """
+
+    u_b64: str
+    v_b64: str
+    kem_algorithm: str
+    seed_length_bytes: int
+    key_length_bytes: int
+
+
+@dataclass(frozen=True)
+class RecipientKeyEnvelope:
+    """面向某个接收者的 KEM key envelope。
+
+    文件正文只用一个 file_key 加密一次；每个接收者用自己的 BF-IBE KEM key
+    封装同一个 file_key。
+    """
+
+    recipient_email: str
+    time_bound_id: str
+    kem_ciphertext: KemCiphertext
+    wrap_iv_b64: str
+    wrapped_file_key_b64: str
+
+
+@dataclass(frozen=True)
 class RecipientCiphertext:
     """某个接收者、某个 chunk 的 IBE 密文。
 
@@ -179,6 +208,35 @@ class EncryptedFileHeader:
     @property
     def recipient_ids(self) -> list[str]:
         return [recipient.time_bound_id for recipient in self.recipients]
+
+
+@dataclass(frozen=True)
+class HybridEncryptedFileHeader:
+    """KEM/DEM 混合加密文件头。"""
+
+    file_id: str
+    algorithm: str
+    encryption_hour: str
+    dem_algorithm: str
+    dem_iv_b64: str
+    dem_tag_b64: str
+    recipient_envelopes: list[RecipientKeyEnvelope]
+    ciphertext_sha256: str
+    schema_version: str = "phase2.hybrid.v1"
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def recipients(self) -> list[RecipientKeyEnvelope]:
+        """兼容文件服务现有 owner/recipient 元数据逻辑。"""
+        return self.recipient_envelopes
+
+    @property
+    def recipient_count(self) -> int:
+        return len(self.recipient_envelopes)
+
+    @property
+    def recipient_ids(self) -> list[str]:
+        return [recipient.time_bound_id for recipient in self.recipient_envelopes]
 
 
 @dataclass(frozen=True)

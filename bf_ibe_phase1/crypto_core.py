@@ -18,7 +18,7 @@ import secrets
 from typing import Any
 
 from bf_ibe_phase1.encoding import b64decode, b64encode, int_from_b64, int_to_b64
-from bf_ibe_phase1.models import PrivateKey, PublicParameters, RecipientCiphertext
+from bf_ibe_phase1.models import KemCiphertext, PrivateKey, PublicParameters, RecipientCiphertext
 
 try:
     from py_ecc.bls.hash_to_curve import hash_to_G2
@@ -52,6 +52,7 @@ except ImportError:  # pragma: no cover - exercised only outside the bf-ibe cond
 
 DEMO_Q = 2**127 - 1
 DEFAULT_MESSAGE_SIZE_BYTES = 32
+DEFAULT_KEM_KEY_BYTES = 32
 BLS12_381_FIELD_BYTES = 48
 BLS12_381_G1_BYTES = BLS12_381_FIELD_BYTES * 2
 BLS12_381_G2_BYTES = BLS12_381_FIELD_BYTES * 4
@@ -89,6 +90,13 @@ def _require_py_ecc() -> None:
         raise RuntimeError(
             "py-ecc is required for BLS12381BFIBE; run `conda run -n bf-ibe python -m pip install py-ecc`"
         )
+
+
+class DecryptReject(ValueError):
+    """Uniform external decryption failure for KEM/DEM CCA2 handling."""
+
+    def __init__(self) -> None:
+        super().__init__("REJECT")
 
 
 def _field_element_to_bytes(value: Any) -> bytes:
@@ -384,15 +392,15 @@ class BLS12381BFIBE:
         """Expose public parameters; never expose `master_secret`."""
         _require_py_ecc()
         return PublicParameters(
-            scheme="BF-IBE-DIRECT-BLS12-381",
+            scheme="BF-IBE-BLS12-381",
             curve="BLS12-381",
             pairing="optimal Ate pairing on BLS12-381, e: G2 x G1 -> GT (py_ecc.optimized_bls12_381.pairing)",
             generator_g1_b64=serialize_g1_point(G1),
             public_point_b64=serialize_g1_point(self._public_point()),
             hash_to_point="IETF hash_to_curve hash_to_G2 with SHA-256 DST BF-IBE-PHASE2-BLS12381G2-SHA256-v1",
             hash_h2="SHA256-XOF mask over serialized GT",
-            hash_h3="SHA256-to-Zq for Fujisaki-Okamoto randomness",
-            hash_h4="SHA256-XOF mask for FullIdent message component",
+            hash_h3="SHA256-to-Zq for Dent/FO KEM randomness and FullIdent comparison",
+            hash_h4="SHA256-XOF KDF for KEM key and FullIdent comparison",
             message_size_bits=self.message_size_bytes * 8,
             version="bls12-381-pairing-v1",
         )
@@ -453,6 +461,57 @@ class BLS12381BFIBE:
         if ciphertext.scheme_mode == "FullIdent":
             return self._decrypt_full(ciphertext, private_key)
         raise ValueError("unsupported ciphertext scheme mode")
+
+    def encapsulate_key(self, identity: str) -> tuple[KemCiphertext, bytes]:
+        """Dent/FO KEM_Encap.
+
+        PDF protocol mapping:
+        - sigma <- {0,1}^n
+        - r = H3(sigma)
+        - U = rP
+        - V = sigma xor H2(e(Q_ID, Ppub)^r)
+        - K = H4(sigma)
+
+        The output KEM ciphertext is exactly (U,V); FullIdent's W component is
+        omitted because the DEM key is directly defined as H4(sigma).
+        """
+        _require_py_ecc()
+        sigma = secrets.token_bytes(self.message_size_bytes)
+        r = _scalar_hash(b"H3", sigma, q=curve_order)
+        q_id = self.identity_point(identity)
+        u_point = multiply(G1, r)
+        shared = pairing(q_id, self._public_point()) ** r
+        mask = _hash_bytes(b"H2", _gt_to_bytes(shared), length=self.message_size_bytes)
+        key = _hash_bytes(b"H4", sigma, length=DEFAULT_KEM_KEY_BYTES)
+        return (
+            KemCiphertext(
+                u_b64=serialize_g1_point(u_point),
+                v_b64=b64encode(_xor(sigma, mask)),
+                kem_algorithm="BF-IBE-DENT-FO-KEM-BLS12-381",
+                seed_length_bytes=self.message_size_bytes,
+                key_length_bytes=DEFAULT_KEM_KEY_BYTES,
+            ),
+            key,
+        )
+
+    def decapsulate_key(self, kem_ciphertext: KemCiphertext, private_key: PrivateKey) -> bytes:
+        """Dent/FO KEM_Decap with a uniform REJECT failure surface."""
+        try:
+            private_point = deserialize_g2_point(private_key.private_key_b64)
+            u_point = deserialize_g1_point(kem_ciphertext.u_b64)
+            encrypted_sigma = b64decode(kem_ciphertext.v_b64)
+            if len(encrypted_sigma) != kem_ciphertext.seed_length_bytes:
+                raise ValueError("invalid KEM V length")
+            shared = pairing(private_point, u_point)
+            mask = _hash_bytes(b"H2", _gt_to_bytes(shared), length=kem_ciphertext.seed_length_bytes)
+            sigma = _xor(encrypted_sigma, mask)
+            expected_r = _scalar_hash(b"H3", sigma, q=curve_order)
+            expected_u = multiply(G1, expected_r)
+            if not _g1_equal(expected_u, u_point):
+                raise ValueError("KEM re-encryption check failed")
+            return _hash_bytes(b"H4", sigma, length=kem_ciphertext.key_length_bytes)
+        except Exception as exc:
+            raise DecryptReject() from exc
 
     def _public_point(self) -> Any:
         """Ppub = sP in G1."""

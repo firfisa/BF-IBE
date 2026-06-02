@@ -1,9 +1,4 @@
-"""Business-facing encryption and decryption interfaces.
-
-Real cryptographic operations are deferred to phase two. These abstractions
-document how the client code will call into direct BasicIdent and FullIdent
-implementations from the Boneh-Franklin IBE paper.
-"""
+"""Business-facing encryption and decryption interfaces."""
 
 from __future__ import annotations
 
@@ -11,7 +6,10 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Iterable
 
-from bf_ibe_phase1.models import EncryptedFileHeader, KeyPackage, PublicParameters
+from bf_ibe_phase1.models import EncryptedFileHeader, HybridEncryptedFileHeader, KeyPackage, PublicParameters
+
+
+FileHeader = EncryptedFileHeader | HybridEncryptedFileHeader
 
 
 class FileEncryptor(ABC):
@@ -24,9 +22,9 @@ class FileEncryptor(ABC):
         recipients: Iterable[str],
         public_parameters: PublicParameters,
         output_path: Path,
-        scheme_mode: str,
-    ) -> EncryptedFileHeader:
-        """Encrypt `source_path` into direct IBE ciphertext chunks at `output_path`."""
+        scheme_mode: str = "KEMDEM",
+    ) -> FileHeader:
+        """Encrypt `source_path` into ciphertext and return the matching header."""
         raise NotImplementedError
 
 
@@ -37,9 +35,9 @@ class FileDecryptor(ABC):
     def decrypt_file(
         self,
         ciphertext_path: Path,
-        header: EncryptedFileHeader,
+        header: FileHeader,
         key_package: KeyPackage,
         output_path: Path,
     ) -> Path:
-        """Decrypt direct IBE ciphertext chunks from `ciphertext_path` into `output_path`."""
+        """Decrypt ciphertext from `ciphertext_path` into `output_path`."""
         raise NotImplementedError

@@ -8,7 +8,7 @@
 1. Alice 上传加密文件；
 2. Bob 作为合法员工下载并解密旧文件；
 3. Bob 离职后，文件服务和 PKG 都拒绝他继续访问；
-4. 输出 BasicIdent 和 FullIdent 的粗略耗时对比。
+4. 输出 KEM/DEM 文件流程和 BasicIdent/FullIdent 的粗略耗时对比。
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from time import perf_counter
 from bf_ibe_phase1.auth import AuthService
 from bf_ibe_phase1.crypto_core import BLS12381BFIBE
 from bf_ibe_phase1.demo_services import FileService, PKGService, ServiceError
-from bf_ibe_phase1.direct_file_crypto import DirectIBEFileDecryptor, DirectIBEFileEncryptor
+from bf_ibe_phase1.hybrid_file_crypto import HybridKEMDEMFileDecryptor, HybridKEMDEMFileEncryptor
 
 
 def main() -> None:
@@ -36,8 +36,8 @@ def main() -> None:
         ibe = BLS12381BFIBE.setup_demo()
         pkg = PKGService(auth, ibe)
         file_service = FileService(auth, workdir / "storage")
-        encryptor = DirectIBEFileEncryptor(ibe)
-        decryptor = DirectIBEFileDecryptor(ibe)
+        encryptor = HybridKEMDEMFileEncryptor(ibe)
+        decryptor = HybridKEMDEMFileDecryptor(ibe)
 
         alice_token = auth.login("alice@company.com", "demo-password")
         bob_token = auth.login("bob@company.com", "demo-password")
@@ -57,19 +57,19 @@ def main() -> None:
         params = pkg.get_public_parameters(alice_token)
         print(f"   params.version = {params.version}")
 
-        print("2. Alice 使用 FullIdent 直接加密文件 chunk，发送给 Bob，身份小时=2026-05-17-02")
+        print("2. Alice 使用 Dent/FO KEM + AES-256-GCM 加密文件，发送给 Bob，身份小时=2026-05-17-02")
         # encryption_hour 固定为 02 点，演示“Bob 之后访问旧文件时申请 02 点私钥”。
         header = encryptor.encrypt_file(
             source_path=plaintext_path,
             recipients=["bob@company.com"],
             public_parameters=params,
             output_path=ciphertext_path,
-            scheme_mode="FullIdent",
             encryption_hour="2026-05-17-02",
         )
         metadata = file_service.upload_file(alice_token, ciphertext_path, header)
         print(f"   uploaded file_id = {metadata.file_id}")
         print(f"   recipient identity = {header.recipient_ids[0]}")
+        print(f"   algorithm = {header.algorithm}")
 
         print("3. Bob 08:00 访问 02:00 文件：文件服务先校验 Bob 仍 active，再返回密文")
         # 文件服务负责 active + ACL 校验；PKG 负责私钥发放校验。

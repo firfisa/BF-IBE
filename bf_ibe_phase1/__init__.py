@@ -2,18 +2,22 @@
 
 from bf_ibe_phase1.auth import AuthService
 from bf_ibe_phase1.crypto_interfaces import FileDecryptor, FileEncryptor
-from bf_ibe_phase1.crypto_core import BLS12381BFIBE, ToyBFIBE
+from bf_ibe_phase1.crypto_core import BLS12381BFIBE, DecryptReject, ToyBFIBE
 from bf_ibe_phase1.demo_services import FileService, PKGService, ServiceError
 from bf_ibe_phase1.direct_file_crypto import DirectIBEFileDecryptor, DirectIBEFileEncryptor
+from bf_ibe_phase1.hybrid_file_crypto import HybridKEMDEMFileDecryptor, HybridKEMDEMFileEncryptor
 from bf_ibe_phase1.models import (
     AuditEvent,
     EncryptedFileHeader,
     FileMetadata,
+    HybridEncryptedFileHeader,
+    KemCiphertext,
     KeyPackage,
     MasterSecret,
     PrivateKey,
     PublicParameters,
     RecipientCiphertext,
+    RecipientKeyEnvelope,
     TimeBoundIdentity,
     UserPrincipal,
 )
@@ -23,6 +27,7 @@ __all__ = [
     "AuditEvent",
     "AuthService",
     "BLS12381BFIBE",
+    "DecryptReject",
     "DirectIBEFileDecryptor",
     "DirectIBEFileEncryptor",
     "EncryptedFileHeader",
@@ -31,6 +36,10 @@ __all__ = [
     "FileEncryptor",
     "FileMetadata",
     "FileServerClient",
+    "HybridEncryptedFileHeader",
+    "HybridKEMDEMFileDecryptor",
+    "HybridKEMDEMFileEncryptor",
+    "KemCiphertext",
     "KeyPackage",
     "MasterSecret",
     "PKGClient",
@@ -38,6 +47,7 @@ __all__ = [
     "PrivateKey",
     "PublicParameters",
     "RecipientCiphertext",
+    "RecipientKeyEnvelope",
     "ServiceError",
     "TimeBoundIdentity",
     "ToyBFIBE",

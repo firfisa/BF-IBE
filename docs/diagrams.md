@@ -1,4 +1,4 @@
-# 阶段一 Mermaid 图
+# Mermaid 图
 
 ## 组件图
 
@@ -54,10 +54,10 @@ sequenceDiagram
   SSO-->>Sender: JWT
   Sender->>PKG: GET /pkg/public-parameters
   PKG-->>Sender: PublicParameters
-  Sender->>Sender: 将文件切分为定长 chunk
   Sender->>Sender: 为每个接收者/文件加密小时构造 email||YYYY-MM-DD-HH
-  Sender->>Sender: 直接运行 BasicIdent 或 FullIdent 加密每个 chunk
-  Sender->>FS: POST /files 密文 + EncryptedFileHeader
+  Sender->>Sender: 生成 file_key 并用 AES-256-GCM 加密文件一次
+  Sender->>Sender: 对每个接收者运行 Dent/FO KEM，封装 file_key
+  Sender->>FS: POST /files DEM 密文 + HybridEncryptedFileHeader
   FS-->>Sender: FileMetadata
 ```
 
@@ -75,12 +75,13 @@ sequenceDiagram
   SSO-->>Receiver: JWT
   Receiver->>FS: GET /files/{file_id}/download
   FS->>FS: 校验 JWT、active 状态、owner/recipient 权限
-  FS-->>Receiver: 密文 + EncryptedFileHeader
+  FS-->>Receiver: DEM 密文 + HybridEncryptedFileHeader
   Receiver->>PKG: POST /pkg/private-keys/request(header 中的 hour)
   PKG->>PKG: 再次校验员工 active 状态
   PKG-->>Receiver: KeyPackage(请求小时私钥)
-  Receiver->>Receiver: 匹配 RecipientCiphertext.time_bound_id
-  Receiver->>Receiver: 按 chunk 运行 BasicIdent 或 FullIdent 解密
+  Receiver->>Receiver: 匹配 RecipientKeyEnvelope.time_bound_id
+  Receiver->>Receiver: KEM_Decap 重算 r'=H3(sigma') 并检查 U==r'P
+  Receiver->>Receiver: 解封装 file_key，再用 AES-256-GCM 解密正文
 ```
 
 ## 旧文件访问流程
@@ -98,7 +99,7 @@ sequenceDiagram
   Client->>PKG: POST /pkg/private-keys/request(2026-05-17-02)
   PKG->>PKG: 校验 JWT 与员工 active 状态
   PKG-->>Client: alice@company.com||2026-05-17-02 私钥
-  Client->>Client: 匹配 02 点密文块并解密
+  Client->>Client: 匹配 02 点 envelope，Decap 后解密 DEM 正文
 ```
 
 ## 离职用户拒绝流程
@@ -129,4 +130,19 @@ flowchart LR
   Full --> CCA["IND-ID-CCA + U=rP 校验"]
   CPA --> Bench["记录加密/解密时间与密文膨胀"]
   CCA --> Bench
+```
+
+## KEM/DEM 主业务流程
+
+```mermaid
+flowchart LR
+  Plain["文件明文"] --> DEM["AES-256-GCM: 一份 DEM 密文"]
+  FK["随机 file_key"] --> DEM
+  ID1["bob||hour"] --> KEM1["Dent/FO KEM: C_KEM=(U,V)"]
+  ID2["admin||hour"] --> KEM2["Dent/FO KEM: C_KEM=(U,V)"]
+  KEM1 --> Wrap1["Envelope: wrap file_key for Bob"]
+  KEM2 --> Wrap2["Envelope: wrap file_key for Admin"]
+  DEM --> Header["HybridEncryptedFileHeader"]
+  Wrap1 --> Header
+  Wrap2 --> Header
 ```

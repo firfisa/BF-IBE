@@ -12,9 +12,13 @@ from pathlib import Path
 from bf_ibe_phase1.models import (
     EncryptedFileHeader,
     FileMetadata,
+    HybridEncryptedFileHeader,
     KeyPackage,
     PublicParameters,
 )
+
+
+FileHeader = EncryptedFileHeader | HybridEncryptedFileHeader
 
 
 class PKGClient(ABC):
@@ -54,7 +58,7 @@ class FileServerClient(ABC):
         self,
         jwt: str,
         ciphertext_path: Path,
-        header: EncryptedFileHeader,
+        header: FileHeader,
     ) -> FileMetadata:
         """上传密文文件和 header。"""
         raise NotImplementedError
@@ -70,6 +74,6 @@ class FileServerClient(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def download_file(self, jwt: str, file_id: str, destination_path: Path) -> EncryptedFileHeader:
+    def download_file(self, jwt: str, file_id: str, destination_path: Path) -> FileHeader:
         """下载密文到本地路径，并返回解密需要的 header。"""
         raise NotImplementedError

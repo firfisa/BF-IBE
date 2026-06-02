@@ -5,8 +5,8 @@ import unittest
 from bf_ibe_phase1.auth import AuthService
 from bf_ibe_phase1.crypto_core import BLS12381BFIBE, ToyBFIBE
 from bf_ibe_phase1.demo_services import FileService, PKGService, ServiceError
-from bf_ibe_phase1.direct_file_crypto import DirectIBEFileDecryptor, DirectIBEFileEncryptor
 from bf_ibe_phase1.encoding import b64decode, b64encode
+from bf_ibe_phase1.hybrid_file_crypto import HybridKEMDEMFileDecryptor, HybridKEMDEMFileEncryptor
 
 
 class ToyBFIBETests(unittest.TestCase):
@@ -77,8 +77,8 @@ class DemoServiceFlowTests(unittest.TestCase):
             ibe = BLS12381BFIBE.setup_demo()
             pkg = PKGService(auth, ibe)
             files = FileService(auth, workdir / "storage")
-            encryptor = DirectIBEFileEncryptor(ibe)
-            decryptor = DirectIBEFileDecryptor(ibe)
+            encryptor = HybridKEMDEMFileEncryptor(ibe)
+            decryptor = HybridKEMDEMFileDecryptor(ibe)
 
             alice_token = auth.login("alice@company.com", "demo-password")
             bob_token = auth.login("bob@company.com", "demo-password")
@@ -93,7 +93,6 @@ class DemoServiceFlowTests(unittest.TestCase):
                 recipients=["bob@company.com"],
                 public_parameters=pkg.get_public_parameters(alice_token),
                 output_path=encrypted_path,
-                scheme_mode="FullIdent",
                 encryption_hour="2026-05-17-02",
             )
             metadata = files.upload_file(alice_token, encrypted_path, header)

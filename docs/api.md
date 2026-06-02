@@ -1,4 +1,4 @@
-# 阶段一 API 文档
+# API 文档
 
 API 使用 FastAPI 风格建模。目前仓库实现的是服务层类和 CLI 演示，HTTP 服务可按本契约接入。
 
@@ -50,7 +50,7 @@ API 使用 FastAPI 风格建模。目前仓库实现的是服务层类和 CLI �
 
 ```json
 {
-  "scheme": "BF-IBE-DIRECT-BLS12-381",
+  "scheme": "BF-IBE-BLS12-381",
   "curve": "BLS12-381",
   "pairing": "optimal Ate pairing on BLS12-381, e: G2 x G1 -> GT",
   "generator_g1_b64": "base64...",
@@ -109,7 +109,7 @@ API 使用 FastAPI 风格建模。目前仓库实现的是服务层类和 CLI �
     }
   ],
   "public_parameters": {
-    "scheme": "BF-IBE-DIRECT-BLS12-381",
+    "scheme": "BF-IBE-BLS12-381",
     "curve": "BLS12-381",
     "pairing": "optimal Ate pairing on BLS12-381, e: G2 x G1 -> GT",
     "generator_g1_b64": "base64...",
@@ -140,36 +140,46 @@ API 使用 FastAPI 风格建模。目前仓库实现的是服务层类和 CLI �
 使用 multipart/form-data：
 
 - `ciphertext`: 密文文件。
-- `header`: JSON 格式 `EncryptedFileHeader`。
+- `header`: JSON 格式 `HybridEncryptedFileHeader`。
 
 ### header 示例
 
 ```json
 {
   "file_id": "file-001",
-  "schema_version": "phase1.v1",
-  "algorithm": "BF-IBE-FULLIDENT-DIRECT-BLS12-381",
+  "schema_version": "phase2.hybrid.v1",
+  "algorithm": "BF-IBE-DENT-FO-KEMDEM-BLS12-381-AES-256-GCM",
   "encryption_hour": "2026-05-17-14",
-  "chunk_size_bytes": 32,
+  "dem_algorithm": "AES-256-GCM",
+  "dem_iv_b64": "base64 96-bit iv...",
+  "dem_tag_b64": "base64 128-bit tag...",
   "ciphertext_sha256": "abc123",
-  "recipients": [
+  "recipient_envelopes": [
     {
       "recipient_email": "alice@company.com",
       "time_bound_id": "alice@company.com||2026-05-17-14",
-      "scheme_mode": "FullIdent",
-      "chunk_index": 0,
-      "u_b64": "base64 encoded BLS12-381 G1 point U=rP",
-      "v_b64": "base64...",
-      "w_b64": "base64..."
+      "kem_ciphertext": {
+        "u_b64": "base64 encoded BLS12-381 G1 point U=rP",
+        "v_b64": "base64 encoded masked sigma...",
+        "kem_algorithm": "BF-IBE-DENT-FO-KEM-BLS12-381",
+        "seed_length_bytes": 32,
+        "key_length_bytes": 32
+      },
+      "wrap_iv_b64": "base64 96-bit iv...",
+      "wrapped_file_key_b64": "base64 ciphertext+tag..."
     },
     {
       "recipient_email": "bob@company.com",
       "time_bound_id": "bob@company.com||2026-05-17-14",
-      "scheme_mode": "BasicIdent",
-      "chunk_index": 0,
-      "u_b64": "base64...",
-      "v_b64": "base64...",
-      "w_b64": null
+      "kem_ciphertext": {
+        "u_b64": "base64 encoded BLS12-381 G1 point U=rP",
+        "v_b64": "base64 encoded masked sigma...",
+        "kem_algorithm": "BF-IBE-DENT-FO-KEM-BLS12-381",
+        "seed_length_bytes": 32,
+        "key_length_bytes": 32
+      },
+      "wrap_iv_b64": "base64 96-bit iv...",
+      "wrapped_file_key_b64": "base64 ciphertext+tag..."
     }
   ],
   "metadata": {
@@ -242,10 +252,10 @@ API 使用 FastAPI 风格建模。目前仓库实现的是服务层类和 CLI �
 
 ### Response 200
 
-阶段二实现时建议返回 multipart response 或先返回下载 URL，再由客户端获取密文对象。阶段一约定响应包含：
+HTTP 实现时建议返回 multipart response 或先返回下载 URL，再由客户端获取密文对象。当前约定响应包含：
 
 - `ciphertext`: 密文文件流。
-- `header`: JSON 格式 `EncryptedFileHeader`。
+- `header`: JSON 格式 `HybridEncryptedFileHeader`。
 
 ### Errors
 
